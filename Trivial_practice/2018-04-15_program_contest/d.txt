@@ -1,0 +1,32 @@
+#include<iostream>
+#include<string>
+#include <vector>
+using namespace std;
+int main()
+{
+	char buf[10];
+	int num_days;
+	scanf("%d", &num_days);
+	int *days = new int[num_days + 1];
+	days[0] = 0;
+	int input;
+	int counter = 1;
+	for (int i = 0; i < num_days; ++i)
+	{
+		scanf("%s", buf); scanf("%d", &input);
+		if (buf[1] == 'o')
+		{
+			days[counter] = days[counter - 1] ^ input;
+			printf("%d\n", days[counter]);
+		}
+		else
+		{
+			days[counter] = days[input];
+			printf("%d\n", days[counter]);
+		}
+		counter++;
+	}
+	delete[] days;
+	system("pause");
+	return 0;
+}

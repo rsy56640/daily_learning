@@ -1,0 +1,83 @@
+#include<iostream>
+#include <vector>
+#include <algorithm>
+using namespace std;
+int main()
+{
+	pair<int, int> xx[5];
+	int i1, i2, i3, i4, i5;
+	int o1, o2, o3, o4, o5;
+	int ponies[25];
+	int r[5][5];
+	int i = 0;
+	while (i < 25)
+	{
+		ponies[i] = i + 1;
+		i++;
+	}
+	int counter = 0;
+	int j = 0;
+	while (j < 5)
+	{
+		for (; counter < 5 + 5 * j; counter++)
+		{
+			cout << ponies[counter] << " ";
+		}
+		cout << flush << endl;
+		for (int i = 0; i < 5; ++i)
+		{
+			int num;
+			cin >> num;
+			xx[i] = make_pair(num, counter - 4 + i);
+		}
+		sort(xx, xx + 5);
+		r[j][0] = xx[0].second;
+		r[j][1] = xx[1].second;
+		r[j][2] = xx[2].second;
+		r[j][3] = xx[3].second;
+		r[j][4] = xx[4].second;
+		j++;
+	}
+	for (int k = 0; k < 5; k++)
+	{
+		cout << r[k][0] << " " << flush;
+	}
+	cout << endl << flush;
+	for (int i = 0; i < 5; ++i)
+	{
+		int num;
+		cin >> num;
+		xx[i] = make_pair(num, r[i][0]);
+	}
+	sort(xx, xx + 5);
+	int first = xx[0].second;
+	int first_second = 0;
+	int tmp_second = xx[1].second;
+	int tmp1 = r[0][2];
+	int tmp2 = r[0][3];
+	int tmp3 = r[0][4];
+	for (int k = 0; k < 5; k++)
+	{
+		if (r[k][0] == first)
+		{
+			first_second = r[k][1];
+			break;
+		}
+	}
+	cout << first_second << " " << tmp_second << " " << tmp1 << " " << tmp2 << " " << tmp3 << flush << endl;
+	r[0][0] = first_second;
+	r[0][1] = tmp_second;
+	r[0][2] = tmp1;
+	r[0][3] = tmp2;
+	r[0][4] = tmp3;
+	for (int i = 0; i < 5; ++i)
+	{
+		int num;
+		cin >> num;
+		xx[i] = make_pair(num, r[0][i]);
+	}
+	sort(xx, xx + 5);
+	cout << first << " " << xx[0].second << " " << 0 << " " << 0 << " " << 0 << flush << endl;
+	//system("pause");
+	return 0;
+}

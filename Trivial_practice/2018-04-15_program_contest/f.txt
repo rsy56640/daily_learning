@@ -1,0 +1,35 @@
+#include<iostream>
+#include <vector>
+#include <algorithm>
+using namespace std;
+
+struct Edge
+{
+	int in, out, val;
+	Edge() {}
+	Edge(int _in, int _out, int _val) :
+		in(_in), out(_out), val(_val) {}
+};
+
+int main()
+{
+	int n, m;
+	scanf("%d%d", &n, &m);
+	vector<Edge> edges(m);
+	int edge_counter = 0;
+	vector<vector<int> > nodes(n);  //node[i] represents the adjency edge_No of i
+	for (int i = 0; i < m; i++)
+	{
+		int in, out; 
+		scanf("%d%d", &in, &out);
+		in--; out--;
+		edges[i] = Edge(in, out, 1);
+		nodes[in].push_back(edge_counter);
+		edge_counter++;
+	}
+
+
+
+	system("pause");
+	return 0;
+}

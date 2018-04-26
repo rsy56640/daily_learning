@@ -1,0 +1,89 @@
+#include <iostream>
+using namespace std;
+typedef unsigned long long ull;
+
+
+class matrix
+{
+public:
+	ull v[3][3];
+
+};
+
+matrix operator*(const matrix& lhs, const matrix& rhs)
+{
+	matrix result;
+	for (int i = 0; i < 3; ++i)
+		for (int j = 0; j < 3; ++j)
+		{
+			ull ans = 0;
+			for (int k = 0; k < 3; ++k)
+				ans += lhs.v[i][k] * rhs.v[k][j];
+			result.v[i][j] = ans;
+		}
+	return result;
+}
+
+
+int main() {
+	ull ulls[5];
+	for (int i = 0; i < 5; i++)
+		cin >> ulls[i];
+
+	ull A = ulls[0];
+	ull B = ulls[1];
+	ull L = ulls[2];
+	ull n = ulls[3];
+	ull s0 = ulls[4];
+
+	if (A == 0)
+	{
+		if (L > 1)
+			cout << B << endl;
+		else cout << s0 << endl;
+		return 0;
+	}
+	if (A == 1)
+	{
+		cout << s0 + (L - 1)*B << endl;
+		return 0;
+	}
+	if (L == 1)
+	{
+		cout << s0 << endl;
+		return 0;
+	}
+	matrix result;
+	result.v[0][0] = A;
+	result.v[0][1] = 0;
+	result.v[0][2] = B;
+	result.v[1][0] = 0;
+	result.v[1][1] = A;
+	result.v[1][2] = B;
+	result.v[2][0] = 0;
+	result.v[2][1] = 0;
+	result.v[2][2] = 1;
+
+	int p = L - 2;
+	matrix J;
+	for (int i = 0; i < 3; ++i)
+	{
+		for (int j = 0; j < 3; ++j)
+			J.v[i][j] = 0;
+		J.v[i][i] = 1;
+	}
+	while (p > 0)
+	{
+		if (p & 1)
+			J = J*result;
+		result = result*result;
+		p >>= 1;
+	}
+
+	ull s1 = A*s0 + B;
+	ull ans = J.v[0][0] * s1 + J.v[0][1] * s0 + J.v[0][2] * 1;
+	cout << ans << endl;
+
+	system("pause");
+	return 0;
+}

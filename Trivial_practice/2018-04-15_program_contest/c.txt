@@ -1,0 +1,28 @@
+#include<iostream>
+#include<string>
+#include <vector>
+using namespace std;
+typedef unsigned long long ull;
+
+int main()
+{
+	ull n;
+	cin >> n;
+
+	if (n == 1)
+	{
+		printf("0\n");
+	}
+	else if (n & 2 == 0)
+	{
+		cout << (n*(n - 1) / 4) % 1000000007 << endl;
+	}
+	else {
+		ull result = (n*(n - 1) / 2) % 1000000007;
+		result = (result * 500000004) % 1000000007;
+		cout << result << endl;
+	}
+
+	system("pause");
+	return 0;
+}
