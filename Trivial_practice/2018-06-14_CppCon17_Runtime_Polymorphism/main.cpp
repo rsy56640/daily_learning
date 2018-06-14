@@ -7,6 +7,7 @@ using namespace std;
 struct vtable
 {
 	void(*accelerate)(void* this_);
+	void*(*clone_)(void* this_);
 	void(*delete_)(void* this_);
 };
 
@@ -14,6 +15,10 @@ template<typename T>
 vtable const vtable_for = vtable{
    [](void* this_) {
 	   (static_cast<T*>(this_))->accelerate();
+   },
+
+   [](void* this_)->void* {
+	   return new T{*static_cast<T*>(this_)};
    },
 
    [](void* this_) {
@@ -31,13 +36,11 @@ public:
 	template<typename T>
 	Vehicle(const T& vehicle)
 		:vptr_{ &vtable_for<T> }, ptr_{ new T(vehicle) } {}
-	/*
-	 * TODO:
-	 *     how to implement copy constructor
-	**/
-	Vehicle(const Vehicle& other) = delete;
+	Vehicle(const Vehicle& other)
+		:vptr_(other.vptr_), ptr_(vptr_->clone_(other.ptr_))
+	{}
 	Vehicle(Vehicle&& other)
-		:vptr_(other.vptr_), ptr_(other.ptr_)
+		: vptr_(other.vptr_), ptr_(other.ptr_)
 	{
 		other.ptr_ = nullptr;
 	}
@@ -75,9 +78,12 @@ int main()
 	Vehicle car(c);
 	Vehicle t(Train{});
 
-	vector<Vehicle> v;
+	std::vector<Vehicle> v;
+
 	v.push_back(Vehicle{ c });
+	v.push_back(c);
 	v.push_back(_STD move(t));
+	v.push_back(t);
 	v.push_back(Plain{});
 
 	for (auto& vehicle : v)
