@@ -3,7 +3,7 @@
 2018-7-3 开始阅读，因为之前自己写过STL的部分组件，所以打算快速的过一遍，就当是某种意义上的补全了。  
 我大概浏览了一下，本书标准大概是C++98，也就是说有很多落后的地方，比如： `auto_ptr`, `move semantics`, `unordered_map` 等.   
 
-#1. Container#
+#1. Container#  
 ----
 - choose the appropriate container facing specific constraints
 - different low-level detail
@@ -16,7 +16,8 @@
 &emsp;    
 
 
-##Item 1 慎重选择容器类型##
+##Item 1 慎重选择容器类型 ##
+
 - Strategy on memory allocation：  
   - contiguous memory allocation   
     &emsp; Advantage: random-access  
@@ -39,7 +40,8 @@
 &emsp;    
 
 
-##Item 2 不要试图编写独立于容器的代码##
+##Item 2 不要试图编写独立于容器的代码 ##
+
 - use static_assert(since c++11), concept(since c++20)
 - try best to achieve low coupling
 - the constraints originate from regulations being different for iterators invalidation among different containers.  
@@ -57,7 +59,8 @@ Solution: **encapsulation**
 &emsp;    
 
 
-##Item 3 确保容器中的对象拷贝正确而高效##
+##Item 3 确保容器中的对象拷贝正确而高效 ##
+
 copy -> performance bottleneck  
 &emsp;&emsp;&nbsp;&nbsp;&nbsp; | object slicing
 &nbsp;  
@@ -68,7 +71,8 @@ Solution: use pointer
 &emsp;    
 
 
-##Item 4 调用 empty 而不是检查 size()是否为0##
+##Item 4 调用 empty 而不是检查 size()是否为0 ##
+
 `empty()` costs constant time for all standard containers.  
 有趣的是，`std::list::size()` 在C++11中复杂度为 O(1)   
 `std::list` 有几个有趣的操作:   
@@ -82,7 +86,8 @@ Solution: use pointer
 &emsp;    
 
 
-##Item 5 区间成员函数优先于与之对应的单元素成员函数##
+##Item 5 区间成员函数优先于与之对应的单元素成员函数 ##
+
 Standard sequential containers all have `::assign()` operation.
 range function specifies the range according to 2 iterators.
 
@@ -101,7 +106,8 @@ In all, using range member function allows container to prepare the resources on
 &emsp;    
 
 
-##Item 6 当心C++编译器最烦人的分析机制 - Most Vexing Parse##
+##Item 6 当心C++编译器最烦人的分析机制 - Most Vexing Parse ##
+
 参考 [Item7: Distinguish between () and {} when creating objects - <<Effective Modern C++>>](https://github.com/gavincyi/Effective-Modern-Cpp#item-7--distinguish-between--and--when-creating-objects)  
 
     int f(double);
@@ -125,6 +131,7 @@ Solution:
 
 
 ##Item 7 如果容器中包含了new，在析构前delete ##
+
 - RAII
 - std::shared_ptr
 - STL空间置配器
@@ -134,6 +141,7 @@ Solution:
 
 
 ##Item 8 切勿创建包含 auto_ptr 的容器对象 ##
+
 `std::auto_ptr` has been deprecated in C++11 and removed in C++17.
 
 &emsp;    
@@ -141,6 +149,7 @@ Solution:
 
 
 ##Item 9 慎重选择删除元素的方法 ##
+
 - For Standard Sequential Containers  
 [Erase–Remove idiom](https://en.wikipedia.org/wiki/Erase%E2%80%93remove_idiom)   
 `c.erase(std::remove(c.begin(), c.end(), value), c.end());`  
