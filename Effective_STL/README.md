@@ -1,7 +1,8 @@
 # Effective STL learning note#
 ----
 2018-7-3 开始阅读，因为之前自己写过STL的部分组件，所以打算快速的过一遍，就当是某种意义上的补全了。  
-我大概浏览了一下，本书标准大概是C++98，也就是说有很多落后的地方，比如： `auto_ptr`, `move semantics`, `unordered_map` 等.
+我大概浏览了一下，本书标准大概是C++98，也就是说有很多落后的地方，比如： `auto_ptr`, `move semantics`, `unordered_map` 等.   
+
 #1. Container#
 ----
 - choose the appropriate container facing specific constraints
