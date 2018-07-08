@@ -75,7 +75,7 @@ Solution: use pointer
 
 - `splice() O(1) or O(N)`
 - `sort()   O(NlogN)`
-- `size()   O(1)`
+- `size()   O(1)`  
 这个值得一写，可惜我现在还没写过｡:.ﾟヽ(｡◕‿◕｡)ﾉﾟ.:｡+ﾟ  
 
 &emsp;    
