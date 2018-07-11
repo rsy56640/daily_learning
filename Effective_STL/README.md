@@ -3,7 +3,7 @@
 2018-7-3 开始阅读，因为之前自己写过STL的部分组件，所以打算快速的过一遍，就当是某种意义上的补全了。  
 我大概浏览了一下，本书标准大概是C++98，也就是说有很多落后的地方，比如： `auto_ptr`, `move semantics`, `unordered_map` 等.   
 
-#1. Container#  
+#1. Container #
 ----
 - choose the appropriate container facing specific constraints
 - different low-level detail
@@ -192,8 +192,10 @@ In all
 &emsp;    
 
 
-##Item 10 了解分配子（std::allocator）的约定和限制 ##
+## Item 10 了解分配子（allocator）的约定和限制 ##
 
+（看了有10个条款，目前的感觉是：这本书略有点鸡肋，如果是入门水平看这本书，虽有一定收获，但恐怕对很对发展进程与设计都是云里雾里。但如果有了一定经验，比如写过STL的一些组件，对标准委员会的提案有一定理解，并且对整个标准库和设计理念的历史发展有相当认识，那么这本书的感觉就有点像是“段子”一样了。）  
+allocator之前在《STL源码剖析》中看过，但没有写过，而且时间长了，也记不住个大概。这一章的理解恐怕还是不够深刻。  
 
 
 
@@ -257,6 +259,46 @@ In all
 
 ##Item 17##
 
+
+
+
+&emsp;    
+&emsp;   
+
+
+##Item 18 避免使用 `std::vector<bool>` ##
+
+参考 `std::string` 的 lazy evaluation 实现，为了区分读和写，使用了 `proxy` 对象，但是使用代理对象会引发一些问题，比如模板实参推导等。
+
+&emsp;    
+&emsp;   
+
+
+##Item 19##
+
+
+
+&emsp;    
+&emsp;   
+
+
+##Item 20##
+
+
+
+&emsp;    
+&emsp;   
+
+
+##Item 21##
+
+
+
+&emsp;    
+&emsp;   
+
+
+##Item 22##
 
 
 
