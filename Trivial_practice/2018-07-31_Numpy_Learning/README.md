@@ -13,6 +13,10 @@
 
 一些基本方法：  
 
+>
+axis = 0 指矩阵纵向   （感觉很迷？？？）    
+axis = 1 指矩阵横向    
+
     a = np.array([1, 2, 3])
     a = np.arange(1000)
     print(a.size * a.itemsize)  # 4000
@@ -64,34 +68,48 @@
     a = np.array([[1, 2, 3], ])    # 矩阵1x3
     print(a.shape)                 # (1, 3)
 
+遍历：   
 
-&nbsp;   
-<a id="2"></a>
-## numpy.linspace ##
+    a = np.array([[1, 7, -4], [3, 6, 6], [-8, 9, 2]])
+    for row in a:
+        print(row)
+    for cell in a.flat:
+        print(cell)
+
+切片：    
+
+    print(a[1:3, 2])  # 矩阵2x1
+    print(a[0:1, :])  # 矩阵1x3
+
+`linspace`:   
 
     a = np.linspace(1, 10, 10)
     print(a)  # [ 1.  2.  3.  4.  5.  6.  7.  8.  9. 10.]
 
+`vstack`, `hstack`:    
+
+    print(np.vstack((a, b)))    # vertical 拼接
+    print(np.hstack((a, a)))    # horizontal 拼接
+
+`vsplit`, `hsplit`:   
+
+    a = np.arange(30).reshape(2, 15)
+    print(a)
+    print(np.hsplit(a, 3))      # horizontal 分割
+    print(np.vsplit(a, 2))      # vertical 分割
+
+index 是 bool矩阵:   
+
+    a = np.arange(12).reshape(3, 4)
+    print(a)
+    b = (a > 4) & (a < 7)       # boolean matrix
+    print(a[b])                 # 只有 5, 6
+    a[b] = -1                   # 5, 6 变 -1
+    print(a)
+
 
 
 &nbsp;   
-<a id="3"></a>
+<a id="2"></a>
 ## numpy. ##
-
-
-
-
-&nbsp;   
-<a id="4"></a>
-## numpy. ##
-
-
-
-
-&nbsp;   
-<a id="5"></a>
-## numpy. ##
-
-
-
 
