@@ -1,4 +1,4 @@
-# Effective STL learning note#
+# Effective STL learning note
 --------  
 2018-7-3 开始阅读，因为之前自己写过STL的部分组件，所以打算快速的过一遍，就当是某种意义上的补全了。  
 我大概浏览了一下，本书标准大概是C++98，也就是说有很多落后的地方，比如： `auto_ptr`, `move semantics`, `unordered_map` 等.   
@@ -11,7 +11,7 @@
 
 --------  
 
-# 1. Container #
+# 1. Container
 ----
 - choose the appropriate container facing specific constraints
 - different low-level detail
@@ -25,7 +25,7 @@
 
 
 <a id="1"></a>
-## Item 1 慎重选择容器类型 ##
+## Item 1 慎重选择容器类型
 
 - Strategy on memory allocation：  
   - contiguous memory allocation   
@@ -50,7 +50,7 @@
 
 
 <a id="2"></a>
-## Item 2 不要试图编写独立于容器的代码 ##
+## Item 2 不要试图编写独立于容器的代码
 
 - use static_assert(since c++11), concept(since c++20)
 - try best to achieve low coupling
@@ -70,7 +70,7 @@ Solution: **encapsulation**
 
 
 <a id="3"></a>
-## Item 3 确保容器中的对象拷贝正确而高效 ##
+## Item 3 确保容器中的对象拷贝正确而高效
 
 copy -> performance bottleneck  
 &emsp;&emsp;&nbsp;&nbsp;&nbsp; | object slicing
@@ -83,7 +83,7 @@ Solution: use pointer
 
 
 <a id="4"></a>
-## Item 4 调用 `empty()` 而不是检查 `size()`是否为0 ##
+## Item 4 调用 `empty()` 而不是检查 `size()`是否为0
 
 `empty()` costs constant time for all standard containers.  
 有趣的是，`std::list::size()` 在C++11中复杂度为 O(1)   
@@ -99,7 +99,7 @@ Solution: use pointer
 
 
 <a id="5"></a>
-## Item 5 区间成员函数优先于与之对应的单元素成员函数 ##
+## Item 5 区间成员函数优先于与之对应的单元素成员函数
 
 Standard sequential containers all have `::assign()` operation.
 range function specifies the range according to 2 iterators.
@@ -120,7 +120,7 @@ In all, using range member function allows container to prepare the resources on
 
 
 <a id="6"></a>
-## Item 6 当心C++编译器最烦人的分析机制 - Most Vexing Parse ##
+## Item 6 当心C++编译器最烦人的分析机制 - Most Vexing Parse
 
 参考 [Item7: Distinguish between () and {} when creating objects - <<Effective Modern C++>>](https://github.com/gavincyi/Effective-Modern-Cpp#item-7--distinguish-between--and--when-creating-objects)  
 
@@ -145,7 +145,7 @@ Solution:
 
 
 <a id="7"></a>
-## Item 7 如果容器中包含了 `new`，在析构前 `delete` ##
+## Item 7 如果容器中包含了 `new`，在析构前 `delete`
 
 - RAII
 - std::shared_ptr
@@ -156,7 +156,7 @@ Solution:
 
 
 <a id="8"></a>
-## Item 8 切勿创建包含 `auto_ptr` 的容器对象 ##
+## Item 8 切勿创建包含 `auto_ptr` 的容器对象
 
 `std::auto_ptr` has been deprecated in C++11 and removed in C++17.
 
@@ -165,7 +165,7 @@ Solution:
 
 
 <a id="9"></a>
-## Item 9 慎重选择删除元素的方法 ##
+## Item 9 慎重选择删除元素的方法
 
 - For Standard Sequential Containers  
 [Erase–Remove idiom](https://en.wikipedia.org/wiki/Erase%E2%80%93remove_idiom)   
@@ -210,7 +210,7 @@ In all
 
 
 <a id="10"></a>
-## Item 10 了解分配子（allocator）的约定和限制 ##
+## Item 10 了解分配子（allocator）的约定和限制
 
 （看了有10个条款，目前的感觉是：这本书略有点鸡肋，如果是入门水平看这本书，虽有一定收获，但恐怕对很对发展进程与设计都是云里雾里。但如果有了一定经验，比如写过STL的一些组件，对标准委员会的提案有一定理解，并且对整个标准库和设计理念的历史发展有相当认识，那么这本书的感觉就有点像是“段子”一样了。）  
 allocator之前在《STL源码剖析》中看过，但没有写过，而且时间长了，也记不住个大概。这一章的理解恐怕还是不够深刻。  
@@ -222,7 +222,7 @@ allocator之前在《STL源码剖析》中看过，但没有写过，而且时�
 
 
 <a id="11"></a>
-## Item 11 ##
+## Item 11 
 
 
 
@@ -232,7 +232,7 @@ allocator之前在《STL源码剖析》中看过，但没有写过，而且时�
 
 
 <a id="12"></a>
-## Item 12 切勿对 STL 容器的线程安全性有不切实际的依赖 ##
+## Item 12 切勿对 STL 容器的线程安全性有不切实际的依赖
 
 唯一的保证：   
 
@@ -270,7 +270,7 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 -------
 
 <a id="13"></a>
-## Item 13 `vector` 和 `string` 优先于动态分配的数组 ##
+## Item 13 `vector` 和 `string` 优先于动态分配的数组
 
 再一次看到 string 的引用计数，在此整理一下相关知识：   
 - Proxy 设计模式 (区分读和写 - [《More Effective C++》 Item 30](http://www.physics.rutgers.edu/~wksiu/C++/MoreEC++_only.pdf))   
@@ -285,7 +285,7 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 
 
 <a id="14"></a>
-## Item 14 使用 `reserve` 来避免不必要的重新分配 ##
+## Item 14 使用 `reserve` 来避免不必要的重新分配
 
     void std::vector::reserve( size_type new_cap );
 >
@@ -302,7 +302,7 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 
 
 <a id="15"></a>
-## Item 15 注意 `string` 实现的多样性##
+## Item 15 注意 `string` 实现的多样性
 
 
 
@@ -313,7 +313,7 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 
 
 <a id="16"></a>
-## Item 16 ##
+## Item 16 
 
 
 
@@ -323,7 +323,7 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 
 
 <a id="17"></a>
-## Item 17##
+## Item 17 
 
 
 
@@ -333,7 +333,7 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 
 
 <a id="18"></a>
-## Item 18 避免使用 `std::vector<bool>` ##
+## Item 18 避免使用 `std::vector<bool>`
 
 参考 `std::string` 的 lazy evaluation 实现，为了区分读和写，使用了 `proxy` 对象，但是使用代理对象会引发一些问题，比如模板实参推导等。
 
@@ -342,7 +342,7 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 
 
 <a id="19"></a>
-## Item 19##
+## Item 19 
 
 
 
@@ -351,7 +351,7 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 
 
 <a id="20"></a>
-## Item 20##
+## Item 20 
 
 
 
@@ -360,7 +360,7 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 
 
 <a id="21"></a>
-## Item 21##
+## Item 21 
 
 
 
@@ -369,7 +369,7 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 
 
 <a id="22"></a>
-## Item 22##
+## Item 22 
 
 
 
