@@ -216,6 +216,11 @@ In all
 allocator之前在《STL源码剖析》中看过，但没有写过，而且时间长了，也记不住个大概。这一章的理解恐怕还是不够深刻。  
 
 [C++中为什么要有allocator类？ - 知乎](https://www.zhihu.com/question/274802525)   
+[《STL源码剖析》提炼总结：空间配置器(allocator) - 知乎](https://zhuanlan.zhihu.com/p/34725232)    
+[C++ 标准库中的allocator是多余的 - CSDN](https://blog.csdn.net/solstice/article/details/4401382)    
+
+
+
 
 
 &emsp;    
