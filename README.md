@@ -11,7 +11,7 @@ record daily learning
   - Dev-C++
   - VS(linux server gcc)
   - VSCode
-  - IDEA
+  - IDEA (Java, Rust, Scala, ...)
   - Pycharm
   - Go/Rust/...
 - editor: 
@@ -22,10 +22,10 @@ record daily learning
   - Understand
 - md: 
   - MarkDownPad
-  - Typora - 非常好
+  - [Typora](https://typora.io/) - 非常好
 - server:
   - Xshell
   - Xftp
-
-      
-         
+- Win10 Unbuntu 子系统
+- Google 云盘
+- 社区：Google 浏览器收藏夹
