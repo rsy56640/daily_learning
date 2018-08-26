@@ -22,6 +22,6 @@
           }
  
       4. SYNCHRONIZED_MEMBER_FUNCTION
-          void A::foo() SYNCHRONIZED_MEMBER_FUNCTION(&T::getMutex_f) {
+          void A::foo() SYNCHRONIZED_MEMBER_FUNCTION(Mutex) {
               // ...
           }

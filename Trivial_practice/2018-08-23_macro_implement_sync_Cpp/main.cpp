@@ -21,7 +21,7 @@
  *         }
  *
  *     4. SYNCHRONIZED_MEMBER_FUNCTION
- *         void A::foo() SYNCHRONIZED_MEMBER_FUNCTION(&T::getMutex_f) {
+ *         void A::foo() SYNCHRONIZED_MEMBER_FUNCTION(Mutex) {
  *             // ...
  *         }
  */
@@ -146,9 +146,9 @@ namespace Sync {
 	/*
 	 * SYNCHRONIZED_MEMBER_FUNCTION
 	 */
-#define SYNCHRONIZED_MEMBER_FUNCTION(getMutex_f) \
+#define SYNCHRONIZED_MEMBER_FUNCTION(Mutex) \
 	try { \
-		throw std::move(std::unique_lock<std::remove_reference_t<decltype((this->*getMutex_f)())>>((this->*getMutex_f)())); \
+		throw std::move(std::unique_lock<std::remove_reference_t<decltype(Mutex)>>(Mutex)); \
 	} catch (std::unique_lock<std::mutex>&)
 
 
@@ -156,7 +156,7 @@ namespace Sync {
 		std::mutex mutex_;
 	public:
 		std::mutex& getMutex() { return mutex_; }
-		void foo_SYNCHRONIZED_MEMBER_FUNCTION(int k) SYNCHRONIZED_MEMBER_FUNCTION(&Sync::A::getMutex)
+		void foo_SYNCHRONIZED_MEMBER_FUNCTION(int k) SYNCHRONIZED_MEMBER_FUNCTION(mutex_)
 		{
 			std::cout << "Test SYNCHRONIZED_MEMBER_FUNCTION in thread " << k << std::endl;
 			num3 = 0;
