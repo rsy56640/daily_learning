@@ -1,27 +1,27 @@
 /* http://www.drdobbs.com/exception-safety-analysis/184401728
  * Emulate "Synchronized" keyword in Java,
  *     1. SYNCHRONIZED
- *         SYNCHRONIZED{
+ *         SYNCHRONIZED {
  *             // ...
  *         }
  *
  *     2. SYNCHRONIZED_OBJ(obj)
- *         1)  SYNCHRONIZED_OBJ(t){
+ *         1)  SYNCHRONIZED_OBJ(t, &T::getMutex_f) {
  *                 // ...
  *             }
  *         2)  void A::foo(){
- *                 SYNCHRONIZED_OBJ(*this){
+ *                 SYNCHRONIZED_OBJ(*this, &T::getMutex_f) {
  *                     // ...
  *                 }
  *             }
  *
  *     3. SYNCHRONIZED_METHOD
- *         void foo() SYNCHRONIZED_METHOD{
+ *         void foo() SYNCHRONIZED_METHOD {
  *             // ...
  *         }
  *
  *     4. SYNCHRONIZED_MEMBER_FUNCTION
- *         void A::foo() SYNCHRONIZED_MEMBER_FUNCTION{
+ *         void A::foo() SYNCHRONIZED_MEMBER_FUNCTION(&T::getMutex_f) {
  *             // ...
  *         }
  */
@@ -44,7 +44,7 @@ namespace Sync {
 	INJECT_VARIABLE(std::lock_guard<std::mutex>, obfuscatedLockName (obfuscatedMutexName))
 
 	int num1 = 0, num2 = 0, num3 = 0;
-	constexpr auto LOOP_TIMES = 50;
+	constexpr int LOOP_TIMES = 50;
 	void foo_SYNCHRONIZED(int k)
 	{
 		std::cout << "Test SYNCHRONIZED in thread " << k << std::endl;
@@ -65,23 +65,9 @@ namespace Sync {
 	/*
 	 * SYNCHRONIZED_OBJ
 	 */
-#define SYNCHRONIZED_OBJ(obj) \
-	INJECT_VARIABLE(std::lock_guard<std::mutex>,            \
-						obfuscatedLockName(Sync::Synchronized_OBJ<decltype(obj)>(obj).GetMutex())) 
-
-	template<class T>
-	class Synchronized_OBJ
-	{
-	public:
-		Synchronized_OBJ(T& _Synchronized_obj)
-			:Synchronized_obj(_Synchronized_obj)
-		{}
-		std::mutex& GetMutex() {
-			return Synchronized_obj.getMutex();
-		}
-	private:
-		T & Synchronized_obj;
-	};
+#define SYNCHRONIZED_OBJ(obj, getMutex_f) \
+	INJECT_VARIABLE(std::lock_guard<std::remove_reference_t<decltype((obj.*getMutex_f)())>>,            \
+						obfuscatedLockName((obj.*getMutex_f)()))
 
 	class Test {
 		int i = 0;
@@ -105,7 +91,7 @@ namespace Sync {
 		std::cout << "Test SYNCHRONIZED_OBJ in thread " << k << std::endl;
 		for (int i = 0; i < LOOP_TIMES; i++)
 		{
-			SYNCHRONIZED_OBJ(t1)
+			SYNCHRONIZED_OBJ(t1, &Sync::Test::getMutex)
 			{
 				t1++;
 				std::cout << t1 << " in the thread: " << k << std::endl;
@@ -117,7 +103,7 @@ namespace Sync {
 		std::cout << "Test SYNCHRONIZED_OBJ in thread " << k << std::endl;
 		for (int i = 0; i < LOOP_TIMES; i++)
 		{
-			SYNCHRONIZED_OBJ(t2)
+			SYNCHRONIZED_OBJ(t2, &Test::getMutex)
 			{
 				t2++;
 				std::cout << t2 << " in the thread: " << k << std::endl;
@@ -160,9 +146,9 @@ namespace Sync {
 	/*
 	 * SYNCHRONIZED_MEMBER_FUNCTION
 	 */
-#define SYNCHRONIZED_MEMBER_FUNCTION \
+#define SYNCHRONIZED_MEMBER_FUNCTION(getMutex_f) \
 	try { \
-		throw std::move(std::unique_lock<std::mutex>(Sync::Synchronized_OBJ<decltype(*this)>(*this).GetMutex())); \
+		throw std::move(std::unique_lock<std::remove_reference_t<decltype((this->*getMutex_f)())>>((this->*getMutex_f)())); \
 	} catch (std::unique_lock<std::mutex>&)
 
 
@@ -170,7 +156,7 @@ namespace Sync {
 		std::mutex mutex_;
 	public:
 		std::mutex& getMutex() { return mutex_; }
-		void foo_SYNCHRONIZED_MEMBER_FUNCTION(int k) SYNCHRONIZED_MEMBER_FUNCTION
+		void foo_SYNCHRONIZED_MEMBER_FUNCTION(int k) SYNCHRONIZED_MEMBER_FUNCTION(&Sync::A::getMutex)
 		{
 			std::cout << "Test SYNCHRONIZED_MEMBER_FUNCTION in thread " << k << std::endl;
 			num3 = 0;
@@ -181,7 +167,7 @@ namespace Sync {
 			}
 		}
 		void foo_SYNCHRONIZED_OBJ(int k) {
-			SYNCHRONIZED_OBJ(*this)
+			SYNCHRONIZED_OBJ(*this, &A::getMutex)
 			{
 				std::cout << "Test SYNCHRONIZED_MEMBER_FUNCTION in thread " << k << std::endl;
 				num1 = 0;
