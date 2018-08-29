@@ -1,4 +1,3 @@
-//https://zhuanlan.zhihu.com/p/24876423
 #include <type_traits>
 #define str_cat(first, second) first##second
 #define has_xxx(member_name) \
@@ -21,27 +20,26 @@ struct A {
 	int i = 0;
 	void foo() {}
 	using void_t = void;
-	using type = A;
 };
-
 struct B {
 	int j = 0;
-	double goo() {}
+	void goo() {}
+	using void_t = void;
 };
 
 
-has_xxx(void_t) //OK to compile
 has_xxx(i)
 has_xxx(foo)
 has_xxx(j)
 has_xxx(goo)
-//has_xxx(void_t) //compile error
+has_xxx(void_t) //compile error if `has_xxx(i)` appears at the head
+
 
 int main()
 {
 
-	has_i<A>::value; // true
-	has_i<B>::value; // false
+	//has_i<A>::value; // true
+	//has_i<B>::value; // false
 
 	has_foo<A>::value; // true
 	has_foo<B>::value; // false
