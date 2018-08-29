@@ -33,23 +33,23 @@
 	if (bool obfuscatedName = false) ; else \
 		for (type name; !obfuscatedName; obfuscatedName = true)
 
-	/*
-	 * SYNCHRONIZED
-	 */
+    /*
+     * SYNCHRONIZED
+     */
 #define SYNCHRONIZED \
 	INJECT_VARIABLE(static std::mutex, obfuscatedMutexName) \
 	INJECT_VARIABLE(std::lock_guard<std::mutex>, obfuscatedLockName (obfuscatedMutexName))
 
-	/*
-	 * SYNCHRONIZED_OBJ
-	 */
+    /*
+     * SYNCHRONIZED_OBJ
+     */
 #define SYNCHRONIZED_OBJ(obj, getMutex_f) \
 	INJECT_VARIABLE(std::lock_guard<std::remove_reference_t<decltype((obj.*getMutex_f)())>>,            \
 						obfuscatedLockName((obj.*getMutex_f)()))
 
-	/*
-	 * SYNCHRONIZED_METHOD
-	 */
+    /*
+     * SYNCHRONIZED_METHOD
+     */
 #define SYNCHRONIZED_METHOD \
 	try { \
 		INJECT_VARIABLE(static std::mutex, obfuscatedMutexName) \
