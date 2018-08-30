@@ -310,16 +310,63 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 <a id="15"></a>
 ## Item 15 注意 `string` 实现的多样性
 
+> 注：Cpp17 引入 [`std::string_view`](https://en.cppreference.com/w/cpp/string/basic_string_view) ([N3921](http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2014/n3921.html))
 
+**实现细节**有时很重要。即使当细节无关紧要时，了解这些细节也可以使我们**确信**它们的确无关紧要。   
+注：作者曾在<<Effective C++>> 中吐槽过有些 `string` 是其他的7倍，此处再次提及。   
+通常含有：
 
+- allocator
+- size
+- capacity
+- pointer
 
+可能含有：
+- referencing count
 
+举例4种实现：  
+
+- 1
+  - allocator
+  - size
+  - capacity
+  - pointer
+      - referencing count
+      - value 
+- 2 
+  - pointer
+      - allocator(optimized)
+      - size
+      - capacity
+      - referencing count
+      - pointer
+          - value
+      - other(concurrency)
+- 3 (<<More Effective C++>> Item 29)
+  - pointer
+      - size
+      - capacity
+      - referencing count
+      - value
+- 4 ([Small Buffer Optimization](https://hackernoon.com/experimenting-with-small-buffer-optimization-for-c-lambdas-d5b703fb47e4))
+  -  I)
+      - allocator
+      - value (size < 15)
+      - size
+      - capacity
+  - II)
+      - allocator
+      - pointer
+          - value 
+      - unused buffer
+      - size
+      - capacity
 &emsp;    
 &emsp;    
 
 
 <a id="16"></a>
-## Item 16 
+## Item 16 了解如何把 `vector` 和 `string` 数据传给旧的 APi
 
 
 
