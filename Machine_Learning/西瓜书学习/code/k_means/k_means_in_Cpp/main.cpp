@@ -58,7 +58,7 @@ template<std::size_t N> double dist(const myVec<N>& lhs, const myVec<N>& rhs)
 		d = lhs.v[i] - rhs.v[i];
 		square += d * d;
 	}
-	return std::sqrtf(square);
+	return std::sqrt(square);
 }
 
 template<std::size_t N> bool operator==(const myVec<N>& lhs, const myVec<N>& rhs)
