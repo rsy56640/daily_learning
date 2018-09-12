@@ -57,9 +57,10 @@ namespace RSY_TOOL::K_means
 			mean_vecs.push_back(D[r]);
 
 		/*
-		 *
-		 * loop until mean_vecs does not change.
-		 * C[label] represents the cluster that respondes to mean_vecs[label].
+		 * Divide vecs into clusters according to their distance,
+		 * and calculate the new mean_vec.
+		 * Loop until mean_vecs does not change.
+		 * Note Bene: C[label] represents the cluster that respondes to mean_vecs[label].
 		 */
 		bool isChanged = true;
 		std::vector<std::set<std::size_t>> C(cluster_amount);
@@ -96,7 +97,7 @@ namespace RSY_TOOL::K_means
 			for (std::size_t label = 0; label < cluster_amount; label++)
 			{
 				Vec mean_vec{};
-				for (auto &i : C[label])
+				for (auto i : C[label])
 				{
 					mean_vec += D[i];
 				}
@@ -149,7 +150,7 @@ namespace RSY_TOOL::K_means
 			for (auto label : *l_it)
 			{
 				if (copy_strategy::STEAL == _copy_strategy)
-					c_it->push_back(std::move(D[label]));
+					c_it->push_back(std::move((const_cast<Vec&>(D[label]))));
 				else c_it->push_back(D[label]);
 			}
 		}
