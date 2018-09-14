@@ -27,7 +27,8 @@ namespace RSY_TOOL::K_means
 	 *     vector which has cluster_amount sets which represent different cluster.
 	 *
 	 * Specification:
-	 *     _D's type is non-const reference since parameter maybe rvalue(initializer-list)
+	 *     _D's type is non-const reference since parameter maybe rvalue(initializer-list),
+	 *    which should not be called in this function.
 	 */
 	template<
 		typename Vec,
@@ -37,7 +38,7 @@ namespace RSY_TOOL::K_means
 		&& std::is_same_v<std::decay_t<decltype(std::declval<Vec>() /= static_cast<std::size_t>(1u))>, Vec>
 		&& std::is_convertible_v<decltype(std::declval<Vec>() == std::declval<Vec>()), bool>
 		>* = nullptr
-		> std::vector<std::set<std::size_t>> k_means_return_label(std::vector<Vec>& _D, const std::size_t cluster_amount, std::function<Dist(const Vec&, const Vec&)> dist)
+		> std::vector<std::set<std::size_t>> k_means_return_label(std::vector<Vec>& _D, const std::size_t cluster_amount, const std::function<Dist(const Vec&, const Vec&)> dist)
 	{
 		const std::vector<Vec>& D = _D;
 		const std::size_t size = D.size();
@@ -139,7 +140,7 @@ namespace RSY_TOOL::K_means
 		&& std::is_same_v<std::decay_t<decltype(std::declval<Vec>() /= static_cast<std::size_t>(1u))>, Vec>
 		&& std::is_convertible_v<decltype(std::declval<Vec>() == std::declval<Vec>()), bool>
 		>* = nullptr
-		> std::vector<std::vector<Vec>> k_means(const std::vector<Vec>& D, const std::size_t cluster_amount, std::function<Dist(const Vec&, const Vec&)> dist, copy_strategy _copy_strategy = copy_strategy::NO_STEAL)
+		> std::vector<std::vector<Vec>> k_means(const std::vector<Vec>& D, const std::size_t cluster_amount, const std::function<Dist(const Vec&, const Vec&)> dist, const copy_strategy _copy_strategy = copy_strategy::NO_STEAL)
 	{
 		std::vector<std::vector<Vec>> clusters(cluster_amount);
 		std::vector<std::set<std::size_t>> labels = k_means_return_label(const_cast<std::vector<Vec>&>(D), cluster_amount, dist);
