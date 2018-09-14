@@ -361,25 +361,43 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
       - unused buffer
       - size
       - capacity
+
 &emsp;    
 &emsp;    
 
 
 <a id="16"></a>
-## Item 16 了解如何把 `vector` 和 `string` 数据传给旧的 APi
+## Item 16 了解如何把 `vector` 和 `string` 数据传给旧的 API
+
+对于 `std::vector<T> v`，得到 `v` 中数据的指针：`&v[0]`。   
+对于 `std::string s`，得到 `char*`：`s.`[`c_str()`](https://en.cppreference.com/w/cpp/string/basic_string/c_str)   
+
+对于 `vector` 来讲，唯一的可能出错就是 `v.size()==0`，只要加上判断就ok。   
+但是对于 `string` 就不可靠了：
+
+- `string` 中的数据并不一定内存连续
+- 不一定以 空字符 结尾**（标准中说明：`c_str()`在结尾加了一个空字符）**
+- `string::c_str()` 不一定指向内部表示，可能只是一个格式化过的副本（假的。。。）
 
 
-
+这个条款略无聊，不写了。   
+另外注意到有不少容器的构造函数接受 Range Constructor。
 
 &emsp;    
 &emsp;   
 
 
 <a id="17"></a>
-## Item 17 
+## Item 17 使用 “swap技巧” 除去多余的容量
 
+如果 `vector` 容量过大，而size过小，而且以后不怎么需要改变，那么就应该尝试减小它的容量。   
 
+    vector<int> v;
+    vector<int>(std::move(v)).swap(v);
 
+当然，STL的实现者可以为其保留更多的容量。
+
+在 swap 发生后，迭代器，指针，引用如果不是处于 dangling 状态，就仍然有效，只是它们所指向的元素已经在另一容器中了。
 
 &emsp;    
 &emsp;   
@@ -394,10 +412,15 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 &emsp;   
 
 
+-------
+# 3. [关联容器](https://en.cppreference.com/w/cpp/container#Associative_containers)
+-------
+
 <a id="19"></a>
-## Item 19 
+## Item 19 理解相等（equality）和等价（equivalence）的区别
 
-
+相等（equality）：`a == b` 为真。    
+等价（equivalence）：`a < b` 和 `b < a` 都为假。   
 
 &emsp;    
 &emsp;   
