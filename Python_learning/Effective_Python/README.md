@@ -26,30 +26,28 @@
    - 注意引入模块的顺序
 
 
-
-
-
 &nbsp;   
 <a id="3"></a>
-### Item 3:
+### Item 3: Know the difference between `bytes`, `str`, and `unicode`
 
-
-
-
+- In Python 3, `str` contains Unicode characters; `bytes` contains raw 8-bit values.  
+- `bytes` and `str` instances cannot be use together with operator like `+` or `>`
+- Use helper function to ensure that the input is expected.
+- Use binary mode(`rb`, `wb`) to read/write binary data from/to a file.
 
 
 &nbsp;   
 <a id="4"></a>
-### Item 4:
+### Item 4: Write helper function instead of complex expression
 
-
-
-
+- reuse
+- abstraction
+- readability
 
 
 &nbsp;   
 <a id="5"></a>
-### Item 5:
+### Item 5: Know how to slice sequences
 
 
 
