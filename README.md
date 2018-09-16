@@ -4,9 +4,13 @@ record daily learning
    
 ------------------
 ### 记录一些好用的工具
-- Anaconda:
-  - Jupyter NoteBook
-  - Spyder
+- 第三方库：
+  - C++:
+      - [Eigen](https://eigen.tuxfamily.org/dox/) - 矩阵运算库 
+  - Python:
+      - [Anaconda](https://www.anaconda.com/):
+          - Jupyter NoteBook - 很方便
+          - Spyder
 - IDE:
   - Dev-C++
   - VS(linux server gcc)
@@ -18,10 +22,10 @@ record daily learning
   - Notepad++
   - Ultra Edit
 - 源码阅读：
-  - Source Insight
-  - Understand
+  - [Source Insight](https://www.sourceinsight.com/download/)
+  - [Understand](https://scitools.com/features/) - 自动生成UML，图像，分析也很棒
 - md: 
-  - MarkDownPad
+  - [MarkDownPad 2](http://markdownpad.com/)
   - [Typora](https://typora.io/) - 非常好
 - server:
   - Xshell
