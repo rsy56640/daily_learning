@@ -392,13 +392,16 @@ STL 的线程安全性我没有研究过，所以无法进行深刻地剖析。
 
 如果 `vector` 容量过大，而size过小，而且以后不怎么需要改变，那么就应该尝试减小它的容量。   
 
-    vector<int> v;
-    vector<int>(v).swap(v);
+    std::vector<T> v;
+    // v.reserve(1000);
+    // v.push_back()...
+    std::vector<T> { std::move_iterator(v.begin()), std::move_iterator(v.end()) }.swap(v);
 
 当然，STL的实现者可以为其保留更多的容量。
 
->注：不建议使用 `std::move()`，原因是在实现中经常是交换容器指针。
->结果可能是和一个空 `vector` 交换了两次，于是不变。
+>注：不建议使用 `std::move()`，原因是在实现中经常是交换容器指针。   
+>结果可能是和一个空 `vector` 交换了两次，于是不变。    
+>推荐使用 [`std::move_iterator()`](https://en.cppreference.com/w/cpp/iterator/move_iterator)，可以成功窃取资源。
 
 在 swap 发生后，迭代器，指针，引用如果不是处于 dangling 状态，就仍然有效，只是它们所指向的元素已经在另一容器中了。
 
