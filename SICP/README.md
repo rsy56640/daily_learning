@@ -1,4 +1,4 @@
-# SCIP note
+# SICP note
 
 -----
 
@@ -84,6 +84,41 @@
 &nbsp;   
 
 **黑箱抽象**：
+
+- **过程抽象**：只关心功能与接口格式。分解中的每一个过程完成了一件可以清楚标明的工作，这使它们可以用作定义其他过程的模块。
+- **形参局部名**：过程的形式参数应该是相应过程体里的局部名字。
+- **内部定义** 和 **块结构**：核心过程中依赖的其他过程应该被内部化，否则会污染其他库实现。（即这些辅助函数不够全局）
+
+如果在一个完整的过程里面**约束变量**全部换名，那么过程的意义将没有任何改变。   
+如果一个变量是不被约束的，我们称它为**自由**的。  
+**作用域**：被声明为过程的形参的约束变量，就以这个过程的体(`body`)作为它们的作用域。
+
+内部定义与块结构：  
+
+    #lang sicp
+    (define (square x) (* x x) )
+    (define (average x y) (/ (+ x y) 2))
+    
+    (define  (sqrt x)
+      (define (good-enough? guess x)
+          (< (abs (- (square guess) x)) 0.001)
+      )
+      (define (improve guess x)
+          (average guess (/ x guess))
+      )
+      (define (sqrt-iter guess x)
+          (if (good-enough? guess x)
+          guess
+          (sqrt-iter (improve guess x) x))
+      )
+     (sqrt-iter 1.0 x)
+    )
+
+
+使用块结构的好处：
+
+- 将辅助过程定义到内部
+- 不用显式的传递某些参数，可以让这些参数作为内部定义中的自由变量（词法作用域）
 
 
 
