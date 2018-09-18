@@ -122,7 +122,7 @@ $$
 \pmb A^l
 & = (J-I)^l \\
 & = \sum_{k=0}^l (-1)^{l-k}\binom{l}{k}J^k \qquad\qquad (note\ J^k=p^{k-1}J,\ J^0=I) \\
-& = \sum_{k=1}^ (-1)^{l-k}\binom{l}{k}p^{k-1}J + (-1)^l I \\
+& = \sum_{k=1}^l (-1)^{l-k}\binom{l}{k}p^{k-1}J + (-1)^l I \\
 for\ i\neq j,\quad \pmb A_{ij}^l & = \frac{1}{p}((p-1)^l - (-1)^l)
 \end{aligned}
 $$
