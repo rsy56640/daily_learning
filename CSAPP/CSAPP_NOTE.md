@@ -26,6 +26,6 @@ IEEE 754
 ![](assets/floating_normal3.png)   
 
 
-
+## Machine Level Representation
 
 

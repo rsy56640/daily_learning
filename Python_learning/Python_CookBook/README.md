@@ -101,6 +101,8 @@
 
 #### `OrderedDict`：保证 key 只出现一次，并且顺序是第一次插入的顺序
 
+    from collections import OrderedDict
+
     o = OrderedDict()
     o["qwe"] = 1
     o['a'] = 2
@@ -109,4 +111,10 @@
     for k, v in o.items():
         print(k, v)
 
+#### `zip()`, `dict.keys()`, `dict.values()`
+
+    dict = { 'a': 2, 'b': 3.7 }
+    max(zip(dict.values(), dict.keys())) # (3.7, 'b')
+
+####
 
