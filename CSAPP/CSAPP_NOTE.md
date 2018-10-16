@@ -29,3 +29,17 @@ IEEE 754
 ## Machine Level Representation
 
 
+![](assets/access_10_16.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
