@@ -116,5 +116,50 @@
     dict = { 'a': 2, 'b': 3.7 }
     max(zip(dict.values(), dict.keys())) # (3.7, 'b')
 
-####
+#### `yield`
+参考 [What does the “yield” keyword do?](https://stackoverflow.com/questions/231767/what-does-the-yield-keyword-do) 第一个回答下面的评论
+
+#### `set()` 中的元素必须是 `hashable`
+
+#### 消除同样属性值的元素
+
+    # 消除同样属性值的元素
+    def dedupe(item_set, key_map=None):
+        one_set = set()
+        for item in item_set:
+            val = item if key_map is None else key_map(item)
+            if val not in one_set:
+                yield item
+                one_set.add(val)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
