@@ -132,6 +132,84 @@
                 yield item
                 one_set.add(val)
 
+#### 命名切片
+避免大量的硬编码下标 `shard = slice(start, end, step)`，更加清晰可读。   
+内置的 `slice()` 函数创建了一个切片对象。
+
+`slice.start`, `slice.stop`, `slice.step`   
+
+
+    items = [x * x for x in range(20)]
+    shard = slice(2, 5)
+    print(items[2:5])    # output [4, 9, 16]
+    print(items[shard])  # output [4, 9, 16]
+
+`slice.indices(size) -> tuple(start, stop, step)`：将切片调整为合适的区间，返回一个三元组。
+
+    items = [x * x for x in range(20)]
+    shard = slice(2, 50, 3).indices(len(items))
+    print(shard) # output (2, 20, 3)
+
+#### list计数
+
+`collections.Counter()`
+
+- `.most_common(size)`
+- `.update(*, **)`
+- `.elements()`
+- `.subtract(*, **)`
+- `Counter()` `+/-` `Counter()`
+
+<a></a>
+
+    import collections as std
+    
+    items = [...]
+    
+    num_counts = std.Counter(items)
+    print(num_counts.most_common(4))
+
+#### operator.itemgetter()
+
+`operator.itemgetter(item)` 返回一个 callable 对象 `f`，调用 `f(r)` 的结果为 **`r[item]`**。
+
+    from operator import itemgetter
+    
+    rows = [
+        {'fname': 'Brian', 'lname': 'Jones', 'uid': 1003},
+        {'fname': 'Brian', 'lname': 'Beazley', 'uid': 1002},
+        {'fname': 'John', 'lname': 'Cleese', 'uid': 1001},
+        {'fname': 'Big', 'lname': 'Jones', 'uid': 1004}
+    ]
+    
+    rows_by_name = sorted(rows, key=itemgetter('fname'))
+    rows_by_name = sorted(rows, key=itemgetter('fname', 'lname'))
+    rows_by_name = sorted(rows, key=lambda _dict: [_dict['fname'], _dict['lname']])
+
+注：使用 `operator.itemgetter(item)` 比 lambda 会稍微快一些。
+
+#### 排序不支持原生比较的对象 operator.attrgetter()
+
+`operator.attrgetter('name')` 返回 `f`，调用 `f(r)` 结果为 **`r.name`**。
+
+    import operator as op
+    
+    class User:
+        def __init__(self, _id):
+            self.id = _id
+    
+        def __repr__(self):
+            return 'User_{}'.format(self.id)
+    
+    users = [User(2), User(67), User(32), User(5)]
+    sorted_by_id = sorted(users, key=op.attrgetter('id'))
+    sorted_by_id = sorted(users, key=lambda u: u.id)
+
+使用 `operator.attrgetter('name')` 比 lambda 会稍微快一些。
+
+
+
+
 
 
 
