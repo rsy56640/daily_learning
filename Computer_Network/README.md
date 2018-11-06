@@ -79,10 +79,12 @@ Early 4 layer internet model:
 
 ![](assets/cs144_2_1.png)
 
-IP:
+**IP**:
 
 - IP makes a best-effort attempt to deliver our datagrams to the other end. But it makes no promises.
 - IP datagrams can get lost, can be delivered out of order, and can be corrupted. There are no guarantees.
+
+![](./assets/cs144_2_2.png)
 
 ### 3. The IP service model
 
@@ -121,7 +123,15 @@ The reason IP is **simple**:
 
 ![](./assets/cs144_3_2.png)
 
-### 4.
+### 4. A Day in the Life of a Packet
+
+TCP 3 handshake
+
+- [SYN] &nbsp;&nbsp;&nbsp; =>
+- &emsp;&emsp;&emsp;&nbsp;&nbsp; <= &nbsp;&nbsp;&nbsp; [SYN, ACK]
+- [ACK] &nbsp;&nbsp;&nbsp; =>
+
+### 5.
 
 
 
