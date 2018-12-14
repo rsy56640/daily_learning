@@ -8,6 +8,7 @@
 - [Keep Writing Codes - Lisp 追随者，SICP 受益者，持续分享编程心得](https://liujiacai.net/tags/sicp/)
 - [鉴心 - blog](http://coderyang.com/tags/sicp/)
 - [SICP 读书笔记，习题解答](https://github.com/jiacai2050/sicp)
+- [lfkdsk/SICP-Magical-Book](https://github.com/lfkdsk/SICP-Magical-Book)
 
 其他题解：
 
