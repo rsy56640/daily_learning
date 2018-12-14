@@ -3,7 +3,7 @@
 - [Hello, world of concurrency in C++!](#1)
 - [Managing threads](#2)
 - [Sharing data between threads](#3)
-- [](#4)
+- [Synchronizing concurrent operations](#4)
 - [](#5)
 - [](#6)
 - [](#7)
@@ -117,9 +117,9 @@ C++ 标准并未对 **进程间通信** 提供任何支持，本书只关注多�
 - [静态局部变量的初始化](https://zh.cppreference.com/w/cpp/language/storage_duration#.E9.9D.99.E6.80.81.E5.B1.80.E9.83.A8.E5.8F.98.E9.87.8F)：标准保证了静态局部变量被准确初始化一次
 - Double-Checked Locking pattern：race condition（见下）
 - [`class std::once_flag`](https://zh.cppreference.com/w/cpp/thread/once_flag)
-- [**`std::call_once()`**](https://zh.cppreference.com/w/cpp/thread/call_once)：准确执行一次可调用 (Callable) 对象 f，即使同时从多个线程调用（若抛异常，则传播；并且不消耗 `std::once_flag`）（用途：打开 socket connection；打开文件；等准确初始化一次资源）
+- [**`std::call_once()`**](https://zh.cppreference.com/w/cpp/thread/call_once)：**准确执行一次**可调用 (Callable) 对象 f，即使同时从多个线程调用（若抛异常，则传播；并且不消耗 `std::once_flag`）（用途：打开 socket connection；打开文件；等准确初始化一次资源）
 - **读写锁**：保护*很少更新*的数据结构
-  - [`class std::shared_mutex`](https://zh.cppreference.com/w/cpp/thread/shared_mutex)：通常用于多个读线程能同时访问同一资源而不导致数据竞争，但只有一个写线程能访问的情形
+  - [**`class std::shared_mutex`**](https://zh.cppreference.com/w/cpp/thread/shared_mutex)：通常用于多个读线程能同时访问同一资源而不导致数据竞争，但只有一个写线程能访问的情形
   - [`class std::shared_lock`](https://zh.cppreference.com/w/cpp/thread/shared_lock)：共享模式锁定关联的互斥
   - 读上锁：`std::shared_lock slk{smtx};` *可共享互斥*
   - 写上锁：`std::lock_guard lg{smtx};` *排他互斥*
@@ -164,6 +164,12 @@ void undefined_behaviour_with_double_checked_locking()
 }
 ```
 
+读写锁 [std_shared_mutex.cpp](https://github.com/rsy56640/daily_learning/blob/master/Cpp_learning/Cpp_Concurrency_In_Action/code/std_shared_mutex.cpp)：使用 `std::shared_mutex`
+
+- 读上锁：`std::shared_lock slk{smtx};` *可共享互斥*
+- 写上锁：`std::lock_guard lg{smtx};` *排他互斥*
+
+
 &nbsp;   
 Ref:
 
@@ -174,8 +180,33 @@ Ref:
 
 &nbsp;   
 <a id="4"></a>
-## Ch04
+## Ch04 Synchronizing concurrent operations
 
+- 等待时间或条件：
+  - (1) shared falg (使用mutex)
+      - 等待线程 keeps checking；执行线程 do task，然后写 flag
+      - 2个缺点：
+          - 1) check flag 上锁，消耗时间
+          - 2) 等待线程可能消耗其他资源
+      - 改进：等待线程 `std::this_thread::sleep_for();`（但是很难确定休眠时间）
+  - (2) 使用条件变量去触发事件并唤醒
+- 0
+
+
+>关于 Condition Variable，参考 [Condition Variables - Operating Systems: Three Easy Pieces](http://pages.cs.wisc.edu/~remzi/OSTEP/threads-cv.pdf)   
+>**hold the lock when calling signal(mostly) or wait(always)**   
+>[用条件变量实现事件等待器的正确与错误做法 - 陈硕的Blog](http://www.cppblog.com/Solstice/archive/2013/09/09/203094.html)   
+
+关于虚假唤醒（[Spurious wakeup](https://en.wikipedia.org/wiki/Spurious_wakeup)）：等待线程有可能偶然返回（**因为接受signal，处理时有可能忽略了notification，所以从wait返回，注意退出wait时已经重新锁定lock**）
+
+- [pthread_cond_signal RATIONALE](http://pubs.opengroup.org/onlinepubs/9699919799/functions/pthread_cond_signal.html#tag_16_418_08)
+- [Why does pthread_cond_wait have spurious wakeups?](https://stackoverflow.com/questions/8594591/why-does-pthread-cond-wait-have-spurious-wakeups)
+- [Spurious wakeups explanation sounds like a bug that just isn't worth fixing, is that right?](https://softwareengineering.stackexchange.com/questions/186842/spurious-wakeups-explanation-sounds-like-a-bug-that-just-isnt-worth-fixing-is)
+- [Do spurious wakeups in Java actually happen?](https://stackoverflow.com/questions/1050592/do-spurious-wakeups-in-java-actually-happen/1051816#1051816)
+- [basic question about concurrency - Google Forum](https://groups.google.com/forum/?hl=ky#!msg/comp.programming.threads/wEUgPq541v8/ZByyyS8acqMJ)
+- [Real cause of spurius wakeups - Google Forum](https://groups.google.com/forum/#!msg/comp.programming.threads/h6vgL_6RAE0/Ur8sq72OoKwJ)
+- [Spurious wakeups](http://blog.vladimirprus.com/2005/07/spurious-wakeups.html)
+- [Calling pthread_cond_signal without locking mutex - Stack Overflow 第一个答案评论区 R 是pthread作者](https://stackoverflow.com/questions/4544234/calling-pthread-cond-signal-without-locking-mutex)
 
 
 
