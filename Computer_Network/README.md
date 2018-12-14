@@ -387,11 +387,24 @@ Flor Control
 - 回退N协议：接收方窗口为1
 - 需要的 sequence number 为 （RWS + SWS）
 
-### v23. Reliable communication - Retransmission strategies
+### [v23. Reliable communication - Retransmission strategies](https://www.youtube.com/watch?v=KMbWM4yfSzs&index=23&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z)
 
+- Go back N (pessimistic)
+- **Selective repeat (optimistic)：假设接收方只有 ACK-m 之后的那一个没有收到，其余全部收到（如果接收方缓存足够）。重新发送 m+1，但 m+1 之后的并不重新发送。**
 
+结论：
 
-### v24. Reliable communication - TCP header
+- 如果接收方窗口很小，使用 Go back N (pessimistic)
+- 如果接收方窗口足够（接近发送方），使用 Selective repeat (optimistic)
+
+### [v24. Reliable communication - TCP header](https://www.youtube.com/watch?v=Qqx2xpTFbEM&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=24)
+
+![](assets/cs144_v23_TCP_header.png)
+
+TCP头长度固定 20B
+
+- Sequence Number (32-bits)：Sequence number of data bytes of a segment in a session
+- Ack number (32-bits)：接收到的最后一个字节的**下一个**，即下一个期待的字节
 
 
 
