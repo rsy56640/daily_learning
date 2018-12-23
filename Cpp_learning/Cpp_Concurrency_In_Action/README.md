@@ -17,12 +17,13 @@
 > 本书的中文翻译坑的一笔（看上去绝对不是机翻，神坑）；   
 > 参考标准委员会的文章和邮件；   
 > 总之要多看一些文章和帖子；   
+> 笔记中掺杂了一些我个人的理解；   
 
 - [线程支持库 - zh/cppreference](https://zh.cppreference.com/w/cpp/thread)
 - [C++11 Multithread Tutorial Series](https://thispointer.com/c11-multithreading-tutorial-series/)
 - [A Detailed Cplusplus Concurrency Tutorial 《C++ 并发编程指南》](https://github.com/forhappy/Cplusplus-Concurrency-In-Practice)
 - [C++11 并发指南系列](https://www.cnblogs.com/haippy/p/3284540.html)
-- [秒杀多线程面试题系列](https://blog.csdn.net/MoreWindows/column/info/killthreadseries)（不确定好不好）
+- [Operating Systems: Three Easy Pieces](http://pages.cs.wisc.edu/~remzi/OSTEP/#book-chapters)
 
 
 &nbsp;   
@@ -190,14 +191,26 @@ Ref:
           - 2) 等待线程可能消耗其他资源
       - 改进：等待线程 `std::this_thread::sleep_for();`（但是很难确定休眠时间）
   - (2) 使用条件变量去触发事件并唤醒
-- 0
+     - 虚假唤醒
+     - unlock 与 signal 顺序
+     - 需要几个条件变量
+     - 唤醒特定的线程
+- 使用 [std::future](https://zh.cppreference.com/w/cpp/thread/future) 来等待事件
+
+
 
 
 >关于 Condition Variable，参考 [Condition Variables - Operating Systems: Three Easy Pieces](http://pages.cs.wisc.edu/~remzi/OSTEP/threads-cv.pdf)   
 >**hold the lock when calling signal(mostly) or wait(always)**   
 >[用条件变量实现事件等待器的正确与错误做法 - 陈硕的Blog](http://www.cppblog.com/Solstice/archive/2013/09/09/203094.html)   
 
+
 关于虚假唤醒（[Spurious wakeup](https://en.wikipedia.org/wiki/Spurious_wakeup)）：等待线程有可能偶然返回（**因为接受signal，处理时有可能忽略了notification，所以从wait返回，注意退出wait时已经重新锁定lock**）
+
+
+线程安全队列：[4_5_thread_safe_queue.cpp](https://github.com/rsy56640/daily_learning/blob/master/Cpp_learning/Cpp_Concurrency_In_Action/code/4_5_thread_safe_queue.cpp)（事实上，如何设计要根据具体场景trade-off）
+
+
 
 - [pthread_cond_signal RATIONALE](http://pubs.opengroup.org/onlinepubs/9699919799/functions/pthread_cond_signal.html#tag_16_418_08)
 - [Why does pthread_cond_wait have spurious wakeups?](https://stackoverflow.com/questions/8594591/why-does-pthread-cond-wait-have-spurious-wakeups)
