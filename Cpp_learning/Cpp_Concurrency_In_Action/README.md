@@ -195,31 +195,82 @@ Ref:
      - unlock 与 signal 顺序
      - 需要几个条件变量
      - 唤醒特定的线程
-- 使用 [std::future](https://zh.cppreference.com/w/cpp/thread/future) 来等待事件
+- 使用 `std::future` 来等待**一次性事件（one-off event）**
+  - [std::future](https://zh.cppreference.com/w/cpp/thread/future) ：提供访问异步操作结果的机制。可移动，不可复制
+      - `T/T&/void get();`
+      - `void wait();`
+      - `bool valid() const noexcept;`
+      - `std::shared_future<T> share() noexcept;`
+      - `enum class` [`std::future_status`](https://zh.cppreference.com/w/cpp/thread/future_status)
+          - `ready`：共享状态就绪
+          - `timeout`：共享状态在经过指定的时限时长前仍未就绪
+          - `deferred`：共享状态含有延迟的函数，故将仅在显式请求时计算结果
+  - [std::promise](https://zh.cppreference.com/w/cpp/thread/promise)：每个 promise 与共享状态关联，共享状态含有一些状态信息和可能仍未求值的结果，它求值为值（可能为 void ）或求值为异常。 promise 可以对共享状态做三件事：（如有疑惑，参考 [promise - 搜索 shared state](http://eel.is/c++draft/futures.promise) 和 [共享状态](http://eel.is/c++draft/futures.state)）
+      - **使就绪**：promise 存储结果或异常于共享状态。标记共享状态为就绪，并解除阻塞任何等待于与该共享状态关联的 future 上的线程
+      - **释放**：promise 放弃其对共享状态的引用。若这是最后一个这种引用，则销毁共享状态。除非这是 `std::async` 所创建的未就绪的共享状态，否则此操作不阻塞
+      - **抛弃**：promise 存储以 `std::future_errc::broken_promise` 为 error_code 的 `std::future_error` 类型异常，令共享状态为就绪，然后释放它
+      - `~promise()`：若共享状态就绪，则释放它；若共享状态未就绪，则存储以 `std::future_errc::broken_promise` 为 error_condition 的 `std::future_error` 类型异常对象，令共享状态就绪再释放它
+  - [std::packaged_task](https://zh.cppreference.com/w/cpp/thread/packaged_task)：包装任何可调用 (Callable) 目标，使得能异步调用它（通常用于线程间传递任务）
+      - 通过 `get_future()` 得到 `std::future<R>`
+      - `void operator()(Args... args);`：以 args 为参数调用存储的任务。任务返回值或任何抛出的异常被存储于共享状态。令共享状态就绪，并解除阻塞任何等待此操作的线程；（`void make_ready_at_thread_exit(Args... args);` 仅在当前线程退出，并销毁所有线程局域存储期对象后，才令共享状态就绪。）
+      - 由于 `packaged_task` 是可调用的，可以新建 `std::thread(std::move(task), args...);`
+  - [std::async](https://zh.cppreference.com/w/cpp/thread/async)
+      - `enum class` [`std::launch`](https://zh.cppreference.com/w/cpp/thread/launch)
+          - `std::launch::async`：运行新线程，以异步执行任务
+          - `std::launch::deferred`：调用方线程上首次请求其结果时执行任务（惰性求值）
+  - [std::shared_future](https://zh.cppreference.com/w/cpp/thread/shared_future)：允许多个线程等候同一共享状态，`std::shared_future` 可复制，而且多个 `std::shared_future` 对象能指代同一共享状态。（若每个线程通过其自身的 shared_future 对象副本访问，则从多个线程访问同一共享状态是安全的。）
+- [namespace std::chrono](https://zh.cppreference.com/w/cpp/header/chrono)
+  - `std::chrono::system_clock`
+  - `std::chrono::duration`
+  - `std::chrono::time_point`
+  - `std::literals::chrono_literals`
+- 
 
 
-
-
+&nbsp;   
 >关于 Condition Variable，参考 [Condition Variables - Operating Systems: Three Easy Pieces](http://pages.cs.wisc.edu/~remzi/OSTEP/threads-cv.pdf)   
 >**hold the lock when calling signal(mostly) or wait(always)**   
 >[用条件变量实现事件等待器的正确与错误做法 - 陈硕的Blog](http://www.cppblog.com/Solstice/archive/2013/09/09/203094.html)   
 
-
+&nbsp;   
 关于虚假唤醒（[Spurious wakeup](https://en.wikipedia.org/wiki/Spurious_wakeup)）：等待线程有可能偶然返回（**因为接受signal，处理时有可能忽略了notification，所以从wait返回，注意退出wait时已经重新锁定lock**）
 
-
+&nbsp;   
 线程安全队列：[4_5_thread_safe_queue.cpp](https://github.com/rsy56640/daily_learning/blob/master/Cpp_learning/Cpp_Concurrency_In_Action/code/4_5_thread_safe_queue.cpp)（事实上，如何设计要根据具体场景trade-off）
 
+&nbsp;   
+当异常类型已知时，建议使用 `prom.set_exception(std::make_exception_ptr(...));` 而不是 `prom.set_exception(std::current_exception());`（这样编译器可以优化；不过异常对象的构造参数也许无法得知，这样就不一样了）
+
+```c++
+struct Ex { int i = 9; };
+int foo_ex(int i) {
+	if (i < 5) throw Ex{};
+	return 233;
+}
+void test()
+{
+	std::promise<double> prom;
+	try {
+		prom.set_value(foo_ex(2));
+	}
+	catch (...) {
+		// prom.set_exception(std::current_exception());
+		prom.set_exception(std::make_exception_ptr(Ex{})); // better on performance but not the same exception
+	}
+}
+```
+
+&nbsp;   
 
 
 - [pthread_cond_signal RATIONALE](http://pubs.opengroup.org/onlinepubs/9699919799/functions/pthread_cond_signal.html#tag_16_418_08)
 - [Why does pthread_cond_wait have spurious wakeups?](https://stackoverflow.com/questions/8594591/why-does-pthread-cond-wait-have-spurious-wakeups)
 - [Spurious wakeups explanation sounds like a bug that just isn't worth fixing, is that right?](https://softwareengineering.stackexchange.com/questions/186842/spurious-wakeups-explanation-sounds-like-a-bug-that-just-isnt-worth-fixing-is)
 - [Do spurious wakeups in Java actually happen?](https://stackoverflow.com/questions/1050592/do-spurious-wakeups-in-java-actually-happen/1051816#1051816)
-- [basic question about concurrency - Google Forum](https://groups.google.com/forum/?hl=ky#!msg/comp.programming.threads/wEUgPq541v8/ZByyyS8acqMJ)
+- [basic question about concurrency - Google Forum](https://groups.google.com/forum/?hl=ky#!msg/comp.programming.threads/wEUgPq541v8/ZByyyS8acqMJ) 参考 Dave Butenhof 的回复（Programming with POSIX threads作者）
 - [Real cause of spurius wakeups - Google Forum](https://groups.google.com/forum/#!msg/comp.programming.threads/h6vgL_6RAE0/Ur8sq72OoKwJ)
 - [Spurious wakeups](http://blog.vladimirprus.com/2005/07/spurious-wakeups.html)
-- [Calling pthread_cond_signal without locking mutex - Stack Overflow 第一个答案评论区 R 是pthread作者](https://stackoverflow.com/questions/4544234/calling-pthread-cond-signal-without-locking-mutex)
+- [Calling pthread_cond_signal without locking mutex - Stack Overflow](https://stackoverflow.com/questions/4544234/calling-pthread-cond-signal-without-locking-mutex) 第一个答案评论区 R 是某版本pthread作者
 
 
 
