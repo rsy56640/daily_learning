@@ -214,7 +214,7 @@ Ref:
       - 通过 `get_future()` 得到 `std::future<R>`
       - `void operator()(Args... args);`：以 args 为参数调用存储的任务。任务返回值或任何抛出的异常被存储于共享状态。令共享状态就绪，并解除阻塞任何等待此操作的线程；（`void make_ready_at_thread_exit(Args... args);` 仅在当前线程退出，并销毁所有线程局域存储期对象后，才令共享状态就绪。）
       - 由于 `packaged_task` 是可调用的，可以新建 `std::thread(std::move(task), args...);`
-  - [std::async](https://zh.cppreference.com/w/cpp/thread/async)
+  - [std::async](https://zh.cppreference.com/w/cpp/thread/async)（大概会根据硬件情况来调整以获得最佳性能）
       - `enum class` [`std::launch`](https://zh.cppreference.com/w/cpp/thread/launch)
           - `std::launch::async`：运行新线程，以异步执行任务
           - `std::launch::deferred`：调用方线程上首次请求其结果时执行任务（惰性求值）
@@ -224,7 +224,9 @@ Ref:
   - `std::chrono::duration`
   - `std::chrono::time_point`
   - `std::literals::chrono_literals`
-- 
+- Communicating Sequential Processer
+- **Message Passing Interface**：没有共享数据，每个线程都是一个**状态机**，通过**消息队列**通信
+- 0
 
 
 &nbsp;   
@@ -261,7 +263,10 @@ void test()
 ```
 
 &nbsp;   
+[异步测试程序](https://github.com/rsy56640/daily_learning/blob/master/Cpp_learning/Cpp_Concurrency_In_Action/code/fucking_test_threads_pool_with_fucking_stdchrono.cpp)：比较了 单线程，线程池异步调度，`std::async`。
 
+
+&nbsp;   
 
 - [pthread_cond_signal RATIONALE](http://pubs.opengroup.org/onlinepubs/9699919799/functions/pthread_cond_signal.html#tag_16_418_08)
 - [Why does pthread_cond_wait have spurious wakeups?](https://stackoverflow.com/questions/8594591/why-does-pthread-cond-wait-have-spurious-wakeups)

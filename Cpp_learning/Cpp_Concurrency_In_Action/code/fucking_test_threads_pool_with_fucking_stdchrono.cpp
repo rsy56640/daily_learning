@@ -23,16 +23,6 @@
 
 using namespace std::literals::chrono_literals;
 
-inline int get_id(const std::thread::id tid)
-{
-	std::ostringstream os;
-	os << tid;
-	return std::stoi(os.str());
-}
-
-
-/***************************************************************************/
-
 
 // parallel tasks
 template<typename Ret> class ThreadsPool
@@ -123,7 +113,7 @@ private:
 
 
 
-int single_thread(std::vector<std::vector<int>> nums)
+int single_thread(std::deque<std::deque<int>> nums)
 {
 	int sum = 0;
 	for (auto const& vec : nums)
@@ -132,7 +122,7 @@ int single_thread(std::vector<std::vector<int>> nums)
 	return sum;
 }
 
-int many_threads(std::vector<std::vector<int>> nums)
+int many_threads(std::deque<std::deque<int>> nums)
 {
 	constexpr auto num_threads = 4;
 	std::thread threads[num_threads];
@@ -158,7 +148,7 @@ int many_threads(std::vector<std::vector<int>> nums)
 	return sum;
 }
 
-int threads_pool(std::vector<std::vector<int>> nums)
+int threads_pool(std::deque<std::deque<int>> nums)
 {
 	ThreadsPool<int> pool;
 	pool.start();
@@ -174,12 +164,12 @@ int threads_pool(std::vector<std::vector<int>> nums)
 	return sum;
 }
 
-int sync_threads(std::vector<std::vector<int>> nums)
+int sync_threads(std::deque<std::deque<int>> nums)
 {
 	std::deque<std::future<int>> dq;
-	for (std::vector<int> const& vec : nums)
+	for (std::deque<int> const& vec : nums)
 		dq.push_back(
-			std::async(std::accumulate<std::vector<int>::const_iterator, int>,
+			std::async(std::accumulate<std::deque<int>::const_iterator, int>,
 				vec.begin(), vec.end(), 0));
 	int sum = 0;
 	for (auto& f : dq)
@@ -188,14 +178,17 @@ int sync_threads(std::vector<std::vector<int>> nums)
 }
 
 
+
+#include <Windows.h>
 void test()
 {
-	std::vector<std::vector<int>> nums1;
-	std::vector<int> vec;
+	std::deque<std::deque<int>> nums1;
+	std::deque<int> vec;
 	for (int i = 0; i < 8; i++)
 	{
+		std::cout << "round " << i << std::endl;
 		vec.clear();
-		for (int j = 0; j < 6000000; j++)
+		for (int j = 0; j < 1000000; j++)
 			vec.push_back(rand());
 		nums1.push_back(std::move(vec));
 	}
@@ -203,25 +196,39 @@ void test()
 	auto nums3 = nums1;
 	auto nums4 = nums1;
 
+	DWORD start, end;
+
+	start = GetTickCount();
 	auto start1 = std::chrono::steady_clock::now();
 	int res1 = single_thread(std::move(nums1));
 	auto end1 = std::chrono::steady_clock::now();
+	end = GetTickCount();
 	std::cout << "single_thread: " << res1 << ", time: " << std::chrono::duration<double>(end1 - start1).count() << std::endl;
+	std::cout << "single_thread: " << res1 << ", time: " << end - start << std::endl;
 
+	start = GetTickCount();
 	auto start2 = std::chrono::steady_clock::now();
 	int res2 = many_threads(std::move(nums2));
 	auto end2 = std::chrono::steady_clock::now();
+	end = GetTickCount();
 	std::cout << "many_threads:  " << res2 << ", time: " << std::chrono::duration<double>(end2 - start2).count() << std::endl;
+	std::cout << "many_threads:  " << res2 << ", time: " << end - start << std::endl;
 
+	start = GetTickCount();
 	auto start3 = std::chrono::steady_clock::now();
 	int res3 = threads_pool(std::move(nums3));
 	auto end3 = std::chrono::steady_clock::now();
+	end = GetTickCount();
 	std::cout << "threads_pool:  " << res3 << ", time: " << std::chrono::duration<double>(end3 - start3).count() << std::endl;
+	std::cout << "threads_pool:  " << res3 << ", time: " << end - start << std::endl;
 
+	start = GetTickCount();
 	auto start4 = std::chrono::steady_clock::now();
 	int res4 = sync_threads(std::move(nums4));
 	auto end4 = std::chrono::steady_clock::now();
+	end = GetTickCount();
 	std::cout << "sync_threads:  " << res4 << ", time: " << std::chrono::duration<double>(end4 - start4).count() << std::endl;
+	std::cout << "sync_threads:  " << res4 << ", time: " << end - start << std::endl;
 }
 
 
