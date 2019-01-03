@@ -23,7 +23,7 @@
 - [Computer Network Tutorials - GeeksforGeeks](https://www.geeksforgeeks.org/computer-network-tutorials/)
 - [Data Communication & Computer Network - tutorialspoint](https://www.tutorialspoint.com/data_communication_computer_network/)
 - [note/计算机网络/计算机网络.md](https://github.com/arkingc/note/blob/master/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%BD%91%E7%BB%9C/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%BD%91%E7%BB%9C.md)
-- [CS-Notes/notes/计算机网络.md](https://github.com/CyC2018/CS-Notes/blob/master/notes/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%BD%91%E7%BB%9C.md)
+- [CS-Notes/notes/计算机网络.md](https://github.com/CyC2018/CS-Notes/blob/master/docs/notes/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%BD%91%E7%BB%9C.md)
 - [InterviewMap - Network](https://yuchengkai.cn/docs/cs/)
 - [Skill-Tree/计算机网络.md](https://github.com/linw7/Skill-Tree/blob/master/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%BD%91%E7%BB%9C.md)
 - [Skill-Tree/网络编程.md](https://github.com/linw7/Skill-Tree/blob/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B.md)
@@ -405,14 +405,42 @@ TCP头长度固定 20B
 
 - Sequence Number (32-bits)：Sequence number of data bytes of a segment in a session
 - Ack number (32-bits)：接收到的最后一个字节的**下一个**，即下一个期待的字节
+- window：窗口大小指定了从被确认的字节算起可以发送多少个字节
+
+### [v25. Reliable communication - Connection setup and teardown](https://www.youtube.com/watch?v=X5dFdXss9V0&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=25)
+
+![](assets/TCP3_handshake_open.png)
+
+- [SYN (SEQ=x)] &emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;&nbsp; =>
+- &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp; <= &nbsp;&nbsp;&nbsp; [SYN(SEQ=y, ACK=x+1)]
+- [(SEQ=x+1, ACK=y+1)] &nbsp;&nbsp;&nbsp;&nbsp; =>
+
+![](assets/TCP4_handshake_close.jpg)
+
+- [FIN (SEQ=u)] &emsp;&emsp;&emsp;&emsp;&emsp; =>
+- &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp; <= &nbsp;&nbsp;&nbsp;&nbsp; [(SEQ=v, ACK=u+1)]
+- &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp; <= &nbsp;&nbsp;&nbsp;&nbsp; [FIN (SEQ=w, ACK=u+1)]
+- [(SEQ=u+1, ACK=w+1)] &nbsp;&nbsp;&nbsp; =>
+
+![](assets/TCP_FSM.png)
+
+### [2-12. Transport (recap)](https://www.youtube.com/watch?v=vtJ2JzhWTsk&t=0s&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=27)
+
+### [3-0. Packet Switching](https://www.youtube.com/watch?v=pOhaD5d0OAI&t=0s&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=28)
+
+#### Packet delay
+
+- packetization delay
+- prpagation delay
+- queueing delay
+
+### [3-1. The History of Networks; The History of the Internet](https://www.youtube.com/watch?v=5Fv1sg6esrU&index=29&t=0s&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z)
+
+### [v29. Packet Switching - Principles: What is packet switching?](https://www.youtube.com/watch?v=y_vtomiD9-Y&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=29)
 
 
 
-### v25. Reliable communication - Connection setup and teardown
 
-
-
-### 2-12. Transport (recap)
 
 
 
