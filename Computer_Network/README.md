@@ -61,7 +61,7 @@
 <a id="cs144"></a>
 ## CS144 学习笔记
 
-### 1-1. A day in the life of an application
+### [1-1. A day in the life of an application]()
 **Bidirectional, reliable byte stream** communication model  
 Abstract away entire network -- just a pipe between 2 programs  
 Application Level:
@@ -70,7 +70,7 @@ Application Level:
 - Skype
 - BitTorrent
 
-### 1-2. The four layer Internet model
+### [1-2. The four layer Internet model]()
 
 Early 4 layer internet model:
 
@@ -374,7 +374,7 @@ Flor Control
 
 ![](assets/cs144_v12_1.png)
 
-### [v22. Sliding window](https://www.youtube.com/watch?v=Atg0HxQdafo&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=22)
+### [v22. Sliding window](https://www.youtube.com/watch?v=Atg0HxQdafo)
 
 - Generalization of stop-and-wait: allow multiple un-acked segments
 - Bound on number of un-acked segments, called *window*
@@ -387,7 +387,7 @@ Flor Control
 - 回退N协议：接收方窗口为1
 - 需要的 sequence number 为 （RWS + SWS）
 
-### [v23. Reliable communication - Retransmission strategies](https://www.youtube.com/watch?v=KMbWM4yfSzs&index=23&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z)
+### [v23. Reliable communication - Retransmission strategies](https://www.youtube.com/watch?v=KMbWM4yfSzs)
 
 - Go back N (pessimistic)
 - **Selective repeat (optimistic)：假设接收方只有 ACK-m 之后的那一个没有收到，其余全部收到（如果接收方缓存足够）。重新发送 m+1，但 m+1 之后的并不重新发送。**
@@ -397,7 +397,7 @@ Flor Control
 - 如果接收方窗口很小，使用 Go back N (pessimistic)
 - 如果接收方窗口足够（接近发送方），使用 Selective repeat (optimistic)
 
-### [v24. Reliable communication - TCP header](https://www.youtube.com/watch?v=Qqx2xpTFbEM&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=24)
+### [v24. Reliable communication - TCP header](https://www.youtube.com/watch?v=Qqx2xpTFbEM)
 
 ![](assets/cs144_v23_TCP_header.png)
 
@@ -407,13 +407,15 @@ TCP头长度固定 20B
 - Ack number (32-bits)：接收到的最后一个字节的**下一个**，即下一个期待的字节
 - window：窗口大小指定了从被确认的字节算起可以发送多少个字节
 
-### [v25. Reliable communication - Connection setup and teardown](https://www.youtube.com/watch?v=X5dFdXss9V0&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=25)
+### [v25. Reliable communication - Connection setup and teardown](https://www.youtube.com/watch?v=X5dFdXss9V0)
 
 ![](assets/TCP3_handshake_open.png)
 
 - [SYN (SEQ=x)] &emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;&nbsp; =>
 - &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp; <= &nbsp;&nbsp;&nbsp; [SYN(SEQ=y, ACK=x+1)]
 - [(SEQ=x+1, ACK=y+1)] &nbsp;&nbsp;&nbsp;&nbsp; =>
+
+>三次握手漏洞：SYN泛洪
 
 ![](assets/TCP4_handshake_close.jpg)
 
@@ -424,9 +426,9 @@ TCP头长度固定 20B
 
 ![](assets/TCP_FSM.png)
 
-### [2-12. Transport (recap)](https://www.youtube.com/watch?v=vtJ2JzhWTsk&t=0s&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=27)
+### [2-12. Transport (recap)](https://www.youtube.com/watch?v=vtJ2JzhWTsk)
 
-### [3-0. Packet Switching](https://www.youtube.com/watch?v=pOhaD5d0OAI&t=0s&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=28)
+### [3-0. Packet Switching](https://www.youtube.com/watch?v=pOhaD5d0OAI)
 
 #### Packet delay
 
@@ -434,12 +436,71 @@ TCP头长度固定 20B
 - prpagation delay
 - queueing delay
 
-### [3-1. The History of Networks; The History of the Internet](https://www.youtube.com/watch?v=5Fv1sg6esrU&index=29&t=0s&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z)
+### [3-1. The History of Networks; The History of the Internet](https://www.youtube.com/watch?v=5Fv1sg6esrU)
 
-### [v29. Packet Switching - Principles: What is packet switching?](https://www.youtube.com/watch?v=y_vtomiD9-Y&list=PLvFG2xYBrYAQCyz4Wx3NPoYJOFjvU7g2Z&index=29)
+### [3-2. Packet Switching - Principles: What is packet switching?](https://www.youtube.com/watch?v=y_vtomiD9-Y)
+
+- Packet Switching has buffers
+- Packets are ruoted individually, by looking up the addr in router's local table
+- All packets share the full capacity of a link
+- Routers maintain no per-communication state
+
+### [3-3. Packet Switching - Principles: Terminology, End to End Delay and Queueing delay](https://www.youtube.com/watch?v=I4d-nne61mk)
+
+#### Propagation Delay
+
+t<sub>l</sub>: the time it takes a single bit to travel over a link at propagation speed c.
+
+#### Packetization Delay
+
+t<sub>p</sub>: the time from when the first to the last bit of a packet is transmitted.
+
+#### End-to-end Delay
+
+t = &Sigma;(<sup>l</sup>&frasl;<sub>c</sub> + <sup>p</sup>&frasl;<sub>r</sub> + Q)
+
+> p: the packet is of p bits   
+> r: the trasmission rate is r bit/s   
+> l: the distance   
+> c: the speed (nearly light speed)   
+> Q: waiting in queue when congestion
+
+- Propagation Delay along the links (fixed)
+- Packetization Delay to place packets onto links (fixed)
+- Queueing Delay in the packet buffers of the routers (variable)
+
+### [3-4. Packet Switching - Principles: Playback buffers](https://www.youtube.com/watch?v=BGLiNgJ66fY)
+
+![](assets/cs144_v31_palyback_buffer.png)
+
+#### Playback buffer
+
+With packet switching, end-to-end delay is variable, use palyback buffer to absorb variation.
+
+### [3-5. Packet Switching - Principles: Simple Deterministic Queue Model](https://www.youtube.com/watch?v=YiFymSKqPR0)
+
+![](assets/cs144_v32_queue_model.png)
+
+### [3-6. Packet Switching - Principles: Queueing Model Properties](https://www.youtube.com/watch?v=gEvGAYFVDDk)
+
+- Burstness increases delay
+- Determinism minimizes delay
+- Little's Result: L = &lambda;d (L is queue size, &lambda; is arrival rate, d is average delay)
+- M/M/1 Queue (马尔科夫过程)
+
+#### Poisson process
+
+Models aggregation of many independent events.
+
+E[number of arrivals in interval t] = &lambda;t
+
+### [3-7. ]()
 
 
+### [3-11. ]()
 
+
+### [4-1. ]()
 
 
 
