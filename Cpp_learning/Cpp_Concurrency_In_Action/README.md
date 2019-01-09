@@ -4,7 +4,7 @@
 - [Managing threads](#2)
 - [Sharing data between threads](#3)
 - [Synchronizing concurrent operations](#4)
-- [](#5)
+- [The C++ memory model and operations on atomic types](#5)
 - [](#6)
 - [](#7)
 - [](#8)
@@ -226,7 +226,6 @@ Ref:
   - `std::literals::chrono_literals`
 - Communicating Sequential Processer
 - **Message Passing Interface**：没有共享数据，每个线程都是一个**状态机**，通过**消息队列**通信
-- 0
 
 
 &nbsp;   
@@ -276,12 +275,15 @@ void test()
 - [Real cause of spurius wakeups - Google Forum](https://groups.google.com/forum/#!msg/comp.programming.threads/h6vgL_6RAE0/Ur8sq72OoKwJ)
 - [Spurious wakeups](http://blog.vladimirprus.com/2005/07/spurious-wakeups.html)
 - [Calling pthread_cond_signal without locking mutex - Stack Overflow](https://stackoverflow.com/questions/4544234/calling-pthread-cond-signal-without-locking-mutex) 第一个答案评论区 R 是某版本pthread作者
-
+- [The actor model in 10 minutes](https://www.brianstorti.com/the-actor-model/)
+- [Hewitt, Meijer and Szyperski: The Actor Model (everything you wanted to know...) - YouTube - （这个好厉害）](https://www.youtube.com/watch?v=7erJ1DV_Tlo)
 
 
 &nbsp;   
 <a id="5"></a>
-## Ch05
+## Ch05 The C++ memory model and operations on atomic types
+
+
 
 
 
