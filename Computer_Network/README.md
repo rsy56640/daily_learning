@@ -628,11 +628,13 @@ cwnd += <sup>SMSS<sup>2</sup></sup> / <sub>cwnd</sub>
 ![](assets/cs144_v44_tcp_tahoe_fsm.png)   
 ![](assets/TCP_congestion_control.png)   
 
-### [5-0. ]()
+### [5-0. Applications and NATs](https://www.youtube.com/watch?v=489lu31fWLU)
 
+>是一种在IP数据包通过路由器或防火墙时重写来源IP地址或目的IP地址的技术。这种技术被普遍使用在有多台主机但只通过一个公有IP地址访问因特网的私有网络中。
 
-### [5-1. ]()
+NAT 看起来很蠢，不看了。
 
+### [5-1. NATs - Types](https://www.youtube.com/watch?v=Cs7ZnneGr4s)
 
 ### [5-2. ]()
 
@@ -643,33 +645,72 @@ cwnd += <sup>SMSS<sup>2</sup></sup> / <sub>cwnd</sub>
 ### [5-4. ]()
 
 
-### [5-5. ]()
+### [5-5. HTTP](https://www.youtube.com/watch?v=QlG7wP7R-vE)
+
+![](assets/cs144_v55_http_request_format.png)
+
+#### HTTP/1.0
+- Open connection
+- Issue Get
+- Server closes connection after response
 
 
-### [5-6. ]()
+### [5-6. HTTP/1.1 Keep-alive](https://www.youtube.com/watch?v=UgIKmj3mnnU)
 
+#### HTTP/1.0
+- Opening many connections is slow
+- Many transfers are small, doesn't let TCP window grow
 
-### [5-7. ]()
+#### HTTP/1.1
+- Added Connection header for requests
+- Added Connection header for responses
+- Added Keep-Alive header for responses
 
+#### SPDY, basis of HTTP/2.0
 
-### [5-8. ]()
+### [5-7. BitTorrent](https://www.youtube.com/watch?v=8SOTEI4JRNg)
 
+#### Torrent file
+- Torrent file describes file to be downloaded
+  - Names tracker
+  - file length, piece length, SHA1 hashes of pieces
+  - Additional metadata
+  - specify tracker
+- Clientes contacts tracker, starts communicating with peers
+- Trackerless torrents use DHT (distributed hash table)
+- BitTorrent breaks file into N pieces
+- Hashes in Torrents provide end-to-end integrity
 
-### [5-9. ]()
+### [5-8. DNS 1](https://www.youtube.com/watch?v=jn_aQjdR9oM)
 
+#### Domain Name System
 
-### [5-10. ]()
+- **Map names to addresses**
+- Must be able to handle huge number of records
+- Must have distributed control
+- Must be robust to individual node failures
 
+### [5-9. DNS 2](https://www.youtube.com/watch?v=IVBh8mIWU3k)
 
-### [5-11. ]()
+![](assets/cs144_v59_DNS_record.png)   
+![](assets/cs144_v59_DNS_msg_structure.png)   
+![](assets/cs144_v59_DNS_RR_structure.png)   
 
+### [5-10. DNS 3](https://www.youtube.com/watch?v=QbKSU06q9aU)
 
-### [5-12. ]()
+### [5-11. DHCP](https://www.youtube.com/watch?v=7BV0KifaumU)
 
+#### Dynamic Host Configuration Protocol
 
+### [5-12. Applications and NATs (recap)](https://www.youtube.com/watch?v=guhAgrKEWAQ)
 
+![](assets/cs144_v62_recap_NAT.png)   
+![](assets/cs144_v62_recap_DNS.png)   
+![](assets/cs144_v62_recap_HTTP.png)   
+![](assets/cs144_v62_recap_BitTorrent.png)   
+![](assets/cs144_v62_recap_App.png)   
 
-### [6-0. ]
+### [6-0. ]()
 
 
 ### [6-9. Routing](https://www.youtube.com/watch?v=VJoYi6UZiCg)
