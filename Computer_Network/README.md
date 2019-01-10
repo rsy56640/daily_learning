@@ -42,18 +42,10 @@
 ## 目录
 
 - [CS144 学习笔记](#cs144)
-  - [](#)
-  - []()
-  - []()
 - [计算机网络 - 哈尔滨工业大学 学习笔记](#computer_network_hit)
   - []()
   - []()
   - []()
-- []()
-  - []()
-- []()
-  - []()
-
 
 
 &nbsp;   
@@ -494,14 +486,193 @@ Models aggregation of many independent events.
 
 E[number of arrivals in interval t] = &lambda;t
 
-### [3-7. ]()
+### [3-7. Packet Switching - Practice: Switching and Forwarding (1)](https://www.youtube.com/watch?v=G0IWn5f-B5s)
+
+- Lookup Address: Match (IP DA) -> Action (Forward to next router)
+- Longest prefix match: xx.xx.xx.xx/x (Trie/[TCAM](https://en.wikipedia.org/wiki/Content-addressable_memory#Ternary_CAMs))
+
+#### Packet Switching
+
+- lookup address in the forwarding table
+- switch to the egress port
+
+#### Ethernet Switching and Internet Router perform similar operations.
+
+**Address lookup is very different in switches and routers.**
+
+### [3-8. Packet Switching - Practice: Switching and Forwarding (2)](https://www.youtube.com/watch?v=TQxP8gBDPwI)
+
+#### Switch packets to the egress port
+
+- Output queueing and shared memory (minimize delay)
+- Input queueing and head-of-line blocking (scalable)
+- Virtual output queues (maximize throughput)
+
+![](assets/cs144_v35_outputqueue.png)   
+![](assets/cs144_v35_headofline_blocking.png)   
+![](assets/cs144_v35_inqueue_switch.png)   
+![](assets/cs144_v35_virtual_outputqueue.png)   
+
+### [3-9. Packet Switching - Principles: Rate guarantees](https://www.youtube.com/watch?v=9mv_iqgEgt0)
+
+- priorities
+  - strict priorities: multi-level queue based on priority
+  - weighted priorities: multi-level queue based on weight（这让我想起了**CFS**）
+- rate guarantees
+
+![](assets/cs144_v36_strict_priority.png)   
+![](assets/cs144_v36_weighted_priority.png)   
+
+### [3-10. Packet Switching - Principles: Delay Guarantees](https://www.youtube.com/watch?v=I66gPPhxbO0)
+
+![](assets/cs144_v37_end2end_delay.png)   
+leaky bucket regulator: prevent packets being dropped along the way.
+
+### [3-11. Packet Switching (recap)](https://www.youtube.com/watch?v=IMESSiKEGg8)
+
+### [4-0. Congestion Control](https://www.youtube.com/watch?v=nh970YyKRDA)
+
+![](assets/TCP_congestion_control.png)
+
+### [4-1. Congestion Control - Basics](https://www.youtube.com/watch?v=ApPRJXppVuQ)
+
+### [4-2. Congestion Control - Basics 2](https://www.youtube.com/watch?v=WIkA4n9H75E)
+
+TCP controls congestion from the end-host.   
+Window size = min( Receiver window, Congestion window )
+
+#### AIMD (Additive Increase Multiplicative Decrease)
+
+- W = W + <sup>1</sup>/<sub>W</sub>, if the packet is reveived OK.（当前窗口 W 个全部成功就 +1）
+- W = <sup>W</sup>/<sub>2</sub>, if the packet is dropped.
+
+### [4-3. Congestion Control - Dynamics of a single AIMD flow](https://www.youtube.com/watch?v=tGBeErydfb8)
+
+>2min左右有一个动画展示AIMD(6min)
+
+Round-trip time **∝** Window size
+
+### [4-4. AIMD Multiple Flows](https://www.youtube.com/watch?v=OAHga4mQr_A)
+
+#### All AIMD does is control the number of outstanding packets in the network.
+
+- Buffer is going to remain highly occupied with packets from multi-flows
+- RTT is seen as constant by packets
+
+### [4-5. Congestion Control - TCP Tahoe](https://www.youtube.com/watch?v=k8ySYDS8B7g)
+
+#### TCP的两个核心算法：慢启动 和 拥塞避免。这两个算法基于 包守恒 和 ACK时钟原理。在同一时刻，TCP只运行一个算法，但两者可以相互切换。通常，TCP在建立新连接时执行慢启动，直至达到阈值或有丢包时，执行拥塞避免算法。
+
+- cwnd：拥塞窗口
+- SMSS：发送方的最大段大小
+
+#### Slow start：使TCP在用 拥塞避免 探寻更多可用带宽之前得到cwnd值，以及帮助TCP建立ACK时钟
+
+每收到一个ACK发送两个包，即指数增长
+
+#### Congestion avoidance：为了得到更多的传输资源，而不影响其他连接传输
+
+一旦慢启动达到阈值，TCP会进入拥塞避免阶段，cwnd增长近似于每次传输的数据段大小。
+
+cwnd += <sup>SMSS<sup>2</sup></sup> / <sub>cwnd</sub>
+
+![](assets/cs144_v44_tcp_tahoe_fsm.png)
+
+#### 参考：[TCP versions and AIMD - Stack Overflow](https://stackoverflow.com/a/36517464/8489782)
+
+### [4-6. Congestion Control - RTT Estimation and Self-Clocking](https://www.youtube.com/watch?v=xwjukFA284E)
+
+#### Timeout
+
+- Estimation of RTT
+- RTT is highly dynamic
+
+![](assets/cs144_v45_tahoe_timeout.png)
+
+#### Self Clocking
+
+- Only put data in when data has left
+- Send new data in response to ACK
+- Send ACK aggressively
+
+### [4-7. Congestion Control - TCP Reno and New Reno](https://www.youtube.com/watch?v=kbg9o4bBVgY)
+
+#### TCP Reno
+
+- Same as Tahoe on timeout
+- On 3 dup ACK
+  - threshold = cwnd / 2
+  - **Fast Recovery**: cwnd /= 2
+  - 每收到一个 **重复ACK**，cwnd += 1（拥塞窗口膨胀阶段：包守恒原理，为了发新的包，让网络始终满）
+  - 当收到 **好ACK**，cwnd 恢复稳定值
+  - **Fast Retransmit**: retransmit missing segment
+  - Stay in congestion avoidance state
+
+#### TCP New Reno
+
+原因：多个数据包丢失，只要收到一个 好ACK，TCP Reno就停止拥塞窗口膨胀，并减小到特定值，导致吞吐量下降。
+
+- Same as Tahoe/Reno on timeout
+- During fast revoery
+  - 记录最后一个 未ACK（即数据传输的最高序列号，恢复点）
+  - 仅当 ACK不小于恢复点的ACK，才停止 Fast Recovery 阶段
+
+### [4-8. Congestion Control - AIMD](https://www.youtube.com/watch?v=6UMBDRALDFA)
+
+### [4-9. Skills --- Reading and RFC](https://www.youtube.com/watch?v=unjz7w_DLN8)
+
+[RFC 5681 - TCP Congestion Control - IETF Tools](https://tools.ietf.org/html/rfc5681)
+
+### [4-10. Congestion Control](https://www.youtube.com/watch?v=JMm2vDkCUJg)
+
+![](assets/cs144_v44_tcp_tahoe_fsm.png)   
+![](assets/TCP_congestion_control.png)   
+
+### [5-0. ]()
 
 
-### [3-11. ]()
+### [5-1. ]()
 
 
-### [4-1. ]()
+### [5-2. ]()
 
+
+### [5-3. ]()
+
+
+### [5-4. ]()
+
+
+### [5-5. ]()
+
+
+### [5-6. ]()
+
+
+### [5-7. ]()
+
+
+### [5-8. ]()
+
+
+### [5-9. ]()
+
+
+### [5-10. ]()
+
+
+### [5-11. ]()
+
+
+### [5-12. ]()
+
+
+
+
+### [6-0. ]
+
+
+### [6-9. Routing](https://www.youtube.com/watch?v=VJoYi6UZiCg)
 
 
 
