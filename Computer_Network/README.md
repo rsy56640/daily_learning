@@ -710,12 +710,47 @@ NAT 看起来很蠢，不看了。
 ![](assets/cs144_v62_recap_BitTorrent.png)   
 ![](assets/cs144_v62_recap_App.png)   
 
-### [6-0. ]()
+### [6-0. Routing](https://www.youtube.com/watch?v=yfIyxDhhWHU)
 
+### [6-1. Routing - Flooding, source routing and spanning trees](https://www.youtube.com/watch?v=uVxJfgW8a8s)
+
+- Flooding
+- Source Routing
+- Forwarding Table (how to populate table)
+
+### [6-2. Routing - Bellman Ford](https://www.youtube.com/watch?v=mShj-x3RMJQ)
+
+### [6-3. Routing - Dijkstra](https://www.youtube.com/watch?v=cONKcx39Q3U)
+
+### [6-4. Routing - Internet (RIP, OSPF) AS's](https://www.youtube.com/watch?v=5ZrfPrwjzyI)
+
+- 分层 Autonomous System，BGP-4
+- Autonomous System 内部网关协议
+  - RIP (Routing Information Protocol) - Interior Routing Protocol
+  - OSPF
+
+### [6-5. Routing - BGP](https://www.youtube.com/watch?v=HAmPPT2Ul08)
+
+#### Border Gateway Protocol 4
+- Path Vector: advertise complete path (AS Path)
+
+### [6-6. Routing - Multicast](https://www.youtube.com/watch?v=IdRz3BijonU)
+
+- Reverse Path Broadcast：反转最短路，如果packet来源是当前路由到src最短路上的下一个，那么当前路由向周围所有路由传播
+  - Pruning：
+- Multiple trees
+- IGMP - Internet group management protocol
+- DVMRP
+- PIM
+
+### [6-7. Routing - Spanning Tree](https://www.youtube.com/watch?v=5cca4lpDvus)
+
+#### Ethernet Switch
+- One single spanning tree
+
+### [6-8. IPV6](https://www.youtube.com/watch?v=SmLc22mA3TU)
 
 ### [6-9. Routing](https://www.youtube.com/watch?v=VJoYi6UZiCg)
-
-
 
 
 &nbsp;   
