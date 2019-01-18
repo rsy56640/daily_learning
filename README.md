@@ -76,6 +76,8 @@ record daily learning
   - The Art of Unix Programming
   - 深入Linux内核架构 中文版 - v2.6.24
   - 深入理解linux内核（中文第三版）- v2.6.11
+- OS
+  - Operating Systems Three Easy Pieces
 - FP
   - Lisp
       - 0
@@ -95,3 +97,4 @@ record daily learning
   - Distributed Computing - Principles, Algorithm, and Systems
   - 大规模分布式存储系统：原理解析与架构实战 - 杨传辉
 - Other
+  - Concepts Techniques and Models of computer programming
