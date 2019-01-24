@@ -87,11 +87,11 @@ record daily learning
       - Parallel and Concurrent Programming in Haskell
       - Thinking Functionally with Haskell
 - DB
-  - Expert Oracle Database Architecture（Oracle编程艺术 深入理解数据库体系结构）
   - Database System Implementations（数据库系统实现）
-  - Database Management Systems
+  - Database Management Systems（数据库管理系统）
+  - Database Systems: The Complete Book（数据库全书）
+  - Expert Oracle Database Architecture（Oracle编程艺术 深入理解数据库体系结构）
   - Fundamentals of Database Systems
-  - Database Systems: The Complete Book
 - Distributed System
   - Designing Data-Intensive Applications
   - Designing Distributed Systems
