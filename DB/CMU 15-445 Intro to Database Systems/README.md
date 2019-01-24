@@ -5,8 +5,13 @@
 - [](#)
 - [06 Database Storage](#06)
 - [07 Buffer Pools](#07)
-- [](#08)
-- [](#09)
+- [08 Hash Tables](#08)
+- [09 Order-Preserving Trees](#09)
+- [10 Query Processing](#10)
+- [11 Sorting & Joins](#11)
+- []()
+- []()
+- []()
 
 
 &nbsp;   
@@ -79,11 +84,57 @@
 
 &nbsp;   
 <a id="08"></a>
-## []()
-
+## [08 Hash Tables](https://www.youtube.com/watch?v=OFYVwCDQcVk)
 
 
 &nbsp;   
 <a id="09"></a>
+## [09 Order-Preserving Trees](https://www.youtube.com/watch?v=Z1Qrsm7EfRw)
+
+Table Index (Storage, Maintenance)
+
+B+树快速重建：排序key，然后自底向上重建
+
+Radix Tree
+
+
+&nbsp;   
+<a id="10"></a>
+## [10 Query Processing](https://www.youtube.com/watch?v=JDo7_wOJnC4)
+
+Query 组织成树。处理：流(one or batch)，前序遍历
+
+Scan: sequential / index
+
+
+&nbsp;   
+<a id="11"></a>
+## (Fall 2018) [11 Sorting & Aggregation Algorithms](https://www.youtube.com/watch?v=9wv-ZzClKks&list=PLSE8ODhjZXja3hgmuwhf89qboV1kOxMx7&t=0s&index=12) + [12 Join Algorithms](https://www.youtube.com/watch?v=9W8HnmSXE4s&index=12&list=PLSE8ODhjZXja3hgmuwhf89qboV1kOxMx7)
+
+External Merge Sort: 1.小块排序，写回disk；2. 递归merge，注意内存只用3个page，2个输入，1个输出（输入是n个page，输出是2n个page，内存中的page看作output_iter）
+
+
+&nbsp;   
+<a id="13"></a>
 ## []()
 
+
+
+
+&nbsp;   
+<a id="13"></a>
+## []()
+
+
+
+
+&nbsp;   
+<a id="14"></a>
+## []()
+
+
+
+
+&nbsp;   
+<a id=""></a>
+## []()
