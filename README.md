@@ -8,7 +8,6 @@ record daily learning
 - 第三方库：
   - C++:
       - [Eigen](https://eigen.tuxfamily.org/dox/) - 矩阵运算库
-      - [Boost.Asio](https://www.boost.org/doc/libs/develop/doc/html/boost_asio.html) - 等什么时候 Networking TS 进标准库我再把这条删了
   - Python:
       - [Anaconda](https://www.anaconda.com/):
           - Jupyter NoteBook - 很方便
@@ -57,6 +56,7 @@ record daily learning
   - C++ Templates_ The Complete Guide-Addison-Wesley (2017)
   - Mastering the C++17 STL
   - Cpp Concurrency in Action
+  - 《Linux多线程服务端编程：使用muduo C++网络库》(陈硕)
 - Rust
   - TRPL
   - 深入浅出Rust
@@ -87,11 +87,12 @@ record daily learning
       - Parallel and Concurrent Programming in Haskell
       - Thinking Functionally with Haskell
 - DB
-  - Database System Implementations（数据库系统实现）
+  - Database System Implementations（数据库系统实现）（是 Database Systems: The Complete Book 的后半部分）
   - Database Management Systems（数据库管理系统）
+  - Datebase System Concepts（数据库系统概念）
+  - Fundamentals of Database Systems
   - Database Systems: The Complete Book（数据库全书）
   - Expert Oracle Database Architecture（Oracle编程艺术 深入理解数据库体系结构）
-  - Fundamentals of Database Systems
 - Distributed System
   - Designing Data-Intensive Applications
   - Designing Distributed Systems
