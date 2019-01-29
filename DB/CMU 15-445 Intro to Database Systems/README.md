@@ -8,9 +8,9 @@
 - [08 Hash Tables](#08)
 - [09 Order-Preserving Trees](#09)
 - [10 Query Processing](#10)
-- [11 Sorting & Joins](#11)
-- []()
-- []()
+- [11 Sorting & Aggregation Algorithms + 12 Join Algorithms](#11)
+- [13 Query Optimization](#13)
+- [14 Parallel Execution](#14)
 - []()
 
 
@@ -113,23 +113,36 @@ Scan: sequential / index
 
 External Merge Sort: 1.小块排序，写回disk；2. 递归merge，注意内存只用3个page，2个输入，1个输出（输入是n个page，输出是2n个page，内存中的page看作output_iter）
 
+### Join (2 table)
+
+- Loop
+  - Block
+  - Index
+- Sort & Merge
+  - Sort Key
+  - Scan Matching Keys（注意key是否是unique！！）
+- Hash
+
 
 &nbsp;   
 <a id="13"></a>
-## []()
+## [13 Query Optimization](https://www.youtube.com/watch?v=3c-Bf7F7gnI)
 
+### Query rewriting
+- **Predicate pushdown**: Perform predicate filtering before join to reduce size of join
+- **Projections**: Perform projections early to create smaller tuples and reduce intermediate results. You can project out all attributes except the ones requested or required (e.g. join attributes)
+- **Join Orderings**: For an n-way join, there is Catalan number (approx 4^n) number of ways to do the join
 
-
-
-&nbsp;   
-<a id="13"></a>
-## []()
-
-
+### Cost Estimation => Choose Better Query Plan
 
 
 &nbsp;   
 <a id="14"></a>
+## [14 Parallel Execution](https://www.youtube.com/watch?v=UKaKiqmX8N8)
+
+
+&nbsp;   
+<a id="15"></a>
 ## []()
 
 
