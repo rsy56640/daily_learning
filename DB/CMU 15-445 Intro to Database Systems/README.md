@@ -2,7 +2,6 @@
 
 这个课程的slides和notes都很全，，我不太想记笔记了。
 
-- [](#)
 - [06 Database Storage](#06)
 - [07 Buffer Pools](#07)
 - [08 Hash Tables](#08)
@@ -11,7 +10,14 @@
 - [11 Sorting & Aggregation Algorithms + 12 Join Algorithms](#11)
 - [13 Query Optimization](#13)
 - [14 Parallel Execution](#14)
-- []()
+- [15 Embedded Database Logic](#15)
+- [16 Concurrency Control Theory](#16)
+- [17 Two-Phase Locking](#17)
+- [18 Index Concurrency Control](#18)
+- [19 Timestamp Ordering Concurrency Control](#19)
+- [20 Multi-Version Concurrency Control](#20)
+- [21 Logging Schemes](#21)
+- [22 Database Recovery](#22)
 
 
 &nbsp;   
@@ -143,11 +149,56 @@ External Merge Sort: 1.小块排序，写回disk；2. 递归merge，注意内存
 
 &nbsp;   
 <a id="15"></a>
-## []()
-
-
+## [15 Embedded Database Logic](https://www.youtube.com/watch?v=trWTqyJ3ZE8)
 
 
 &nbsp;   
-<a id=""></a>
-## []()
+<a id="16"></a>
+## [16 Concurrency Control Theory](https://www.youtube.com/watch?v=LNOomyGJp8Y)
+
+Conflict Serializability - Dependency Graphs
+
+
+&nbsp;   
+<a id="17"></a>
+## [17 Two-Phase Locking](https://www.youtube.com/watch?v=OYk3JHukTR8)
+
+- 2PL generates acyclic precedence graph
+- dirty read -> Strict 2PL
+
+
+&nbsp;   
+<a id="18"></a>
+## [18 Index Concurrency Control](https://www.youtube.com/watch?v=poRiberfVxE)
+
+- Intention Lock
+
+### Phantom Problem
+
+### Isolation Level
+![](assets/18_isolation.png)
+
+### Concurrent B+ Tree
+
+
+&nbsp;   
+<a id="19"></a>
+## [19 Timestamp Ordering Concurrency Control](https://www.youtube.com/watch?v=xpQ9fQWa14c)
+### Timestamp Concurrency Control
+![](assets/19_read1.png)   
+![](assets/19_read2.png)   
+![](assets/19_write.png)   
+![](assets/19_ThomasWrite.png)   
+
+### Optimistic Concurrency Control
+
+做一份copy，检查，提交。
+
+
+&nbsp;   
+<a id="20"></a>
+## [20 Multi-Version Concurrency Control](https://www.youtube.com/watch?v=dK4PSHwf_ZA)
+
+- Snapshot Isolation
+- Version Storage
+- GC

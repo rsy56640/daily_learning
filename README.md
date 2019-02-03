@@ -90,9 +90,10 @@ record daily learning
   - Database System Implementations（数据库系统实现）（是 Database Systems: The Complete Book 的后半部分）
   - Database Management Systems（数据库管理系统）
   - Fundamentals of Database Systems
+  - Transaction Processing: Concepts and Techniques（事务处理：概念与技术）
+  - Datebase System Concepts（数据库系统概念）
   - Database Systems: The Complete Book（数据库全书）
   - Expert Oracle Database Architecture（Oracle编程艺术 深入理解数据库体系结构）
-  - Datebase System Concepts（数据库系统概念）
 - Distributed System
   - Designing Data-Intensive Applications
   - Designing Distributed Systems
