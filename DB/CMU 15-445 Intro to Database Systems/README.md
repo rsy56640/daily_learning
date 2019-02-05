@@ -202,3 +202,23 @@ Conflict Serializability - Dependency Graphs
 - Snapshot Isolation
 - Version Storage
 - GC
+
+
+&nbsp;   
+<a id="21"></a>
+## [21 Logging Schemes](https://www.youtube.com/watch?v=ajI9HtwtMcg&index=22)
+
+- Shadow Paging，有点像leveldb的VersionSet
+- WAL
+
+
+&nbsp;   
+<a id="22"></a>
+## [22 Database Recovery](https://www.youtube.com/watch?v=loCpsrZw6Hk)
+
+- CLR for UNDO
+
+![](assets/22_aries.png)   
+![](assets/22_redo1.png)   
+![](assets/22_redo2.png)   
+![](assets/22_undo.png)   
