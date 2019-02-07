@@ -20,6 +20,7 @@
 > 笔记中掺杂了一些我个人的理解；   
 
 - [线程支持库 - zh/cppreference](https://zh.cppreference.com/w/cpp/thread)
+- [原子操作库 - zh/cppreference](https://zh.cppreference.com/w/cpp/atomic)
 - [C++11 Multithread Tutorial Series](https://thispointer.com/c11-multithreading-tutorial-series/)
 - [A Detailed Cplusplus Concurrency Tutorial 《C++ 并发编程指南》](https://github.com/forhappy/Cplusplus-Concurrency-In-Practice)
 - [C++11 并发指南系列](https://www.cnblogs.com/haippy/p/3284540.html)
@@ -271,22 +272,65 @@ void test()
 - [Why does pthread_cond_wait have spurious wakeups?](https://stackoverflow.com/questions/8594591/why-does-pthread-cond-wait-have-spurious-wakeups)
 - [Spurious wakeups explanation sounds like a bug that just isn't worth fixing, is that right?](https://softwareengineering.stackexchange.com/questions/186842/spurious-wakeups-explanation-sounds-like-a-bug-that-just-isnt-worth-fixing-is)
 - [Do spurious wakeups in Java actually happen?](https://stackoverflow.com/questions/1050592/do-spurious-wakeups-in-java-actually-happen/1051816#1051816)
-- [basic question about concurrency - Google Forum](https://groups.google.com/forum/?hl=ky#!msg/comp.programming.threads/wEUgPq541v8/ZByyyS8acqMJ) 参考 Dave Butenhof 的回复（Programming with POSIX threads作者）
+- [basic question about concurrency - Google Forum](https://groups.google.com/forum/?hl=ky#!msg/comp.programming.threads/wEUgPq541v8/ZByyyS8acqMJ) 参考 Dave Butenhof 的回复（《Programming with POSIX threads》作者）
 - [Real cause of spurius wakeups - Google Forum](https://groups.google.com/forum/#!msg/comp.programming.threads/h6vgL_6RAE0/Ur8sq72OoKwJ)
 - [Spurious wakeups](http://blog.vladimirprus.com/2005/07/spurious-wakeups.html)
 - [Calling pthread_cond_signal without locking mutex - Stack Overflow](https://stackoverflow.com/questions/4544234/calling-pthread-cond-signal-without-locking-mutex) 第一个答案评论区 R 是某版本pthread作者
 - [The actor model in 10 minutes](https://www.brianstorti.com/the-actor-model/)
-- [Hewitt, Meijer and Szyperski: The Actor Model (everything you wanted to know...) - YouTube - （这个好厉害）](https://www.youtube.com/watch?v=7erJ1DV_Tlo)
+- [Hewitt, Meijer and Szyperski: The Actor Model (everything you wanted to know...) - YouTube](https://www.youtube.com/watch?v=7erJ1DV_Tlo)（这个好厉害）
 
 
 &nbsp;   
 <a id="5"></a>
 ## Ch05 The C++ memory model and operations on atomic types
 
+- [内存模型](https://zh.cppreference.com/w/cpp/language/memory_model)
+- [std::atomic_flag](https://zh.cppreference.com/w/cpp/atomic/atomic_flag)：免锁的原子布尔类型（可以理解为*是否被占用*）
+  - 初始化：`std::atomic_flag lock = ATOMIC_FLAG_INIT;`
+  - [`bool test_and_set(order)`]()：原子地设置标志为 true 并获得其先前值（返回false即表示成功占用，返回true则自旋等待）
+  - [`void clear(order)`](https://zh.cppreference.com/w/cpp/atomic/atomic_flag/clear)：原子地设置标志为 false
+  - 自旋锁：
+```c++
+while (lock.test_and_set(std::memory_order_acquire))  // acquire lock
+    ; // spin
+// ...
+lock.clear(std::memory_order_release);                // release lock
+```
+- [std::atomic](https://zh.cppreference.com/w/cpp/atomic/atomic)
+  - [`void store(T desired, order)`](https://zh.cppreference.com/w/cpp/atomic/atomic/store)：原子地以 `desired` 替换当前值，按照 `order` 的值影响内存
+  - [`void operator=(T desired)`](https://zh.cppreference.com/w/cpp/atomic/atomic/operator%3D)：等价于 `store(desired)`
+  - [`T load(order)`](https://zh.cppreference.com/w/cpp/atomic/atomic/load)：原子地加载并放回原子变量的当前值，按照 `order` 的值影响内存
+  - [`T operator T()`](https://zh.cppreference.com/w/cpp/atomic/atomic/operator_T)：等价于 `load()`
+  - [`T exchange(T desired, order)`]()：原子地以 `desired` 替换底层值，返回之前的值；操作为 *read-modify-write*；根据 `order` 的值影响内存
+  - [`bool compare_exchange_weak(T& expected, T desired)`, `bool compare_exchange_strong(T& expected, T desired)`](http://eel.is/c++draft/atomics.types.operations#18)：原子地比较 `*this` 和 `expect` 的值表示。若相同，则把 `desired` 写入 `*this`；若不同，则将 `*this` 的值加载进 `expect`
+  - `bool compare_exchange_weak()`的用法：思路是根据条件不断计算值，直到条件值相等（若不等，条件值会被更新为 `*this`）
+      - compare-and-swap [[$30.7.1.20]](http://eel.is/c++draft/atomics.types.operations#20)
+      - 链表添加：
+```c++
+// a simple global linked list:
+struct Node { int value; Node* next; };
+std::atomic<Node*> list_head(nullptr);
+
+void append(int val)
+{
+	// append an element to the list
+	Node* newNode = new Node{ val, list_head };
+
+	// next is the same as: list_head = newNode, but in a thread-safe way:
+	while (!list_head.compare_exchange_weak(newNode->next, newNode)) {}
+	// (with newNode->next updated accordingly if some other thread just appended another node)
+}
+```
+- 特化的 `std::fetch_xx`
+- [std::memory_order](https://zh.cppreference.com/w/cpp/atomic/memory_order)
+- a
 
 
+&nbsp;   
 
-
+- [Why it's termed read-modify-write but not read-write? - Stack Overflow](https://stackoverflow.com/questions/49452022/why-its-termed-read-modify-write-but-not-read-write)
+- [如何理解 C++11 的六种 memory order？](https://www.zhihu.com/question/24301047)
+- [C++11 并发指南七(C++11 内存模型一：介绍)](http://www.cnblogs.com/haippy/p/3412858.html)
 
 
 &nbsp;   
