@@ -18,7 +18,7 @@ record daily learning
   - VSCode
   - IDEA (Java, Rust, Scala, ...)
   - Pycharm
-  - Go/Rust/...
+  - Go(LiteIDE)/Rust/...
 - editor:
   - Notepad++
   - Ultra Edit
@@ -86,6 +86,7 @@ record daily learning
       - Real World Haskell
       - Parallel and Concurrent Programming in Haskell
       - Thinking Functionally with Haskell
+  - The Little Typer
 - DB
   - Database System Implementations（数据库系统实现）（是 Database Systems: The Complete Book 的后半部分）
   - Database Management Systems（数据库管理系统）
