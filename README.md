@@ -79,6 +79,8 @@ record daily learning
 - OS
   - Operating Systems Three Easy Pieces
 - FP
+  - Types and Programming Languages
+  - The Little Typer
   - Lisp
       - 0
   - Haskell
@@ -86,7 +88,6 @@ record daily learning
       - Real World Haskell
       - Parallel and Concurrent Programming in Haskell
       - Thinking Functionally with Haskell
-  - The Little Typer
 - DB
   - Database System Implementations（数据库系统实现）（是 Database Systems: The Complete Book 的后半部分）
   - Database Management Systems（数据库管理系统）
@@ -105,3 +106,4 @@ record daily learning
   - 大规模分布式存储系统：原理解析与架构实战 - 杨传辉
 - Other
   - Concepts Techniques and Models of computer programming
+  - Readings in Database Systems 5th Edition
