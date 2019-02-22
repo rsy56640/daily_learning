@@ -291,16 +291,18 @@ void test()
 >&nbsp; 20. [ Note: The value observed by a load of an atomic depends on the “happens before” relation, which depends on the values observed by loads of atomics. The intended reading is that there must exist an association of atomic loads with modifications they observe that, together with suitably chosen modification orders and the “happens before” relation derived as described above, satisfy the resulting constraints as imposed here. — end note ]
 
 
-对于一个 atomic 对象，它存在唯一一个 modification order，即该对象从诞生以来被修改的顺序。而 load 读到的值可以是从上次读取到最近修改中间任意一个(包括上次读取的值)。（注意到，即使有 happens-before关系，中间也可能插入另一个线程的写操作）。总之读到的值是 （该线程）**现在已经到达的点**（就这个意思，参考p131 number list例子）位于 modification order **及以后**的值。    
-如果操作是 RMW，那么确保读到最新的值，即 modification order 最后的值。
+1. 对于一个 atomic 对象，它存在唯一一个 modification order，即该对象从诞生以来被修改的顺序。而一个线程中 load 读到的值可以是从上次读取到最近修改中间任意一个(包括上次读取的值)。（注意到，即使有 happens-before关系，中间也可能插入另一个线程的写操作）。总之读到的值是 （该线程）**现在已经到达的点**（就这个意思，参考p131 number list例子）位于 modification order **及以后**的值。（线程中关于 atomic 的视角只能沿 modification order 向后）    
+2. 如果操作是 RMW，那么确保读到最新的值，即 modification order 最后的值。（无 happens-before 关系）   
+3. modification order 需要满足 happens-before 关系：如果对某一atomic的操作A happens-before B，那么该atomic的 modification order 中A在B前
+
 
 ---
 
 - [内存模型](https://zh.cppreference.com/w/cpp/language/memory_model)
 - [std::atomic_flag](https://zh.cppreference.com/w/cpp/atomic/atomic_flag)：免锁的原子布尔类型（可以理解为*是否被占用*）
   - 初始化：`std::atomic_flag lock = ATOMIC_FLAG_INIT;`
-  - [`bool test_and_set(order)`]()：原子地设置标志为 true 并获得其先前值（返回false即表示成功占用，返回true则自旋等待）
-  - [`void clear(order)`](https://zh.cppreference.com/w/cpp/atomic/atomic_flag/clear)：原子地设置标志为 false
+  - [`bool test_and_set(order=seq_cst)`]()：原子地设置标志为 true 并获得其先前值（返回false即表示成功占用，返回true则自旋等待）（[RWM操作](http://eel.is/c++draft/atomics.flag#5)）
+  - [`void clear(order=seq_cst)`](https://zh.cppreference.com/w/cpp/atomic/atomic_flag/clear)：原子地设置标志为 false
   - 自旋锁：
 ```c++
 while (lock.test_and_set(std::memory_order_acquire))  // acquire lock
@@ -314,7 +316,7 @@ lock.clear(std::memory_order_release);                // release lock
   - [`T load(order)`](https://zh.cppreference.com/w/cpp/atomic/atomic/load)：原子地加载并放回原子变量的当前值，按照 `order` 的值影响内存
   - [`T operator T()`](https://zh.cppreference.com/w/cpp/atomic/atomic/operator_T)：等价于 `load()`
   - [`T exchange(T desired, order)`]()：原子地以 `desired` 替换底层值，返回之前的值；操作为 *read-modify-write*；根据 `order` 的值影响内存
-  - [`bool compare_exchange_weak(T& expected, T desired)`, `bool compare_exchange_strong(T& expected, T desired)`](http://eel.is/c++draft/atomics.types.operations#18)：原子地比较 `*this` 和 `expect` 的值表示。若相同，则把 `desired` 写入 `*this`；若不同，则将 `*this` 的值加载进 `expect`
+  - [`bool compare_exchange_weak(T& expected, T desired)`, `bool compare_exchange_strong(T& expected, T desired)`](http://eel.is/c++draft/atomics.types.operations#18)：原子地比较 `*this` 和 `expect` 的值表示。若相同，则把 `desired` 写入 `*this`；若不同，则将 `*this` 的值加载进 `expect`。（**如果true，则操作是RWM；否则只是load操作**。*有点迷，，因为load可能不是最新值*）。order推荐用`std::memory_order_acq_rel` - [参考 Anthony Williams 的评论](https://preshing.com/20170612/can-reordering-of-release-acquire-operations-introduce-deadlock/)
   - `bool compare_exchange_weak()`的用法：思路是根据条件不断计算值，直到条件值相等（若不等，条件值会被更新为 `*this`）
       - compare-and-swap [[$30.7.1.20]](http://eel.is/c++draft/atomics.types.operations#20)
       - 链表添加（这个之后还会牵扯到ABA问题）：
@@ -342,11 +344,15 @@ void append(int val)
 - **synchronized-with**：（线程间）if operation A in one thread synchronizes-with operation B in another thread, then A inter-thread happens before B. 
 - **happens-before**：transitive
 
+>**p121** a suitably tagged atomic write operation W on a variable x synchronizes-with a suitably tagged atomic read operation on x that **[1]**reads the value stored by either that write (W), **[2]**or a subsequent atomic write operation on x by the same thread that performed the initial write W, **[3]**or a sequence of atomic read-modifywrite operations on x (such as fetch_add() or compare_exchange_weak()) by any thread, where the value read by the first thread in the sequence is the value written by W
+
 #### *sequentially consistent*
 `std::memory_order_seq_cst`：全局一致（a single global order of events）
 
 #### *relaxed*
 `std::memory_order_relaxed`：线程间无同步制约（其他*某一*线程 Load-Load，保证第二个 Load 不会读到之前的值，参考p131 ask a number in list 的例子）
+
+![](assets/modifcation_order.png)
 
 #### *acquire-release*
 Synchronization is **pairwise**, between the thread that does the *release* and the thread that does the *acquire*. *A release operation **synchronizes-with** an acquire operation that reads the value written*. Synchronization with acquire-release has the **transitive** nature of *happens-before*.
@@ -366,6 +372,8 @@ Synchronization is **pairwise**, between the thread that does the *release* and 
 - *carries-a-dependency-to*：线程内
 - 若 `load(consume)` 的值 *carries-a-dependency-to* 操作A，那么 `store()` happens-before 操作A；对于线程内无 *carries-a-dependency-to* 关系的操作，没有 happens-before 关系
   - [std::kill_dependency](https://en.cppreference.com/w/cpp/atomic/kill_dependency)
+
+> All Operations in the releasing thread preceding the store-release happens-before an operation X in the consuming thread if X depends on the value loaded.
 
 #### Release sequences and synchronizes-with
 没看懂？？？
@@ -403,15 +411,17 @@ void thread2() {
 - **if a load that takes place before an acquire fence sees the result of a release operation, the release operation synchronizes-with the acquire fence**
 - **synchronization point is the fence itself**
 
+>In fact, the majority of function calls act as compiler barriers, whether they contain their own compiler barrier or not. This excludes inline functions, functions declared with the pure attribute, and cases where link-time code generation is used. Other than those cases, a call to an external function is even stronger than a compiler barrier, since the compiler has no idea what the function’s side effects will be. It must forget any assumptions it made about memory that is potentially visible to that function.
+
 ### Ordering nonatomic operations with atomics to avoid data race
 
 一直纳闷为什么 `atomic_flag::test_and_set` 参数可以是 `std::memory_order_acquire`，知道看到了这个帖子：[memory ordering with atomic_flag spin lock - Stack Overflow](https://stackoverflow.com/questions/14791495/memory-ordering-with-atomic-flag-spin-lock)
 
->这个应该是有问题的，其实应该是 **read-modify-write操作读到最新值**
+>这个应该是有问题的，其实应该是 **read-modify-write操作读到最新值**。对于普通的load操作，不论order，读到的值是当前可见点或之后的值。
 
 ![](assets/atomic_from_SO.png)
 
-[[14882 § 30.4] - Order and consistency]()
+[[14882 § 30.4] - Order and consistency](http://eel.is/c++draft/atomics.order)
 >&nbsp; 10. Atomic read-modify-write operations shall always read the last value (in the modification order) written before the write associated with the read-modify-write operation.   
 >&nbsp; 11. Implementations should make atomic stores visible to atomic loads within a reasonable amount of time.
 
@@ -440,22 +450,36 @@ void thread2() {
 
 ---
 
+目前还是不太懂visibility和 什么时候读到这个值 的时机，感觉有用就是cubical-num list，其他的标准上也没说很清楚。比如 compare_exchange，成功了是RMW，失败了是load，这就很诡异了，读到一个值，怎么知道是不是最新值？？？
+
 ### Reference
 
 >天知道我为了看这一章翻了多少资料。。。感jio要秃了。。。
 
 - [[14882 § 6.8.2] - Multi-threaded executions and data races](http://eel.is/c++draft/intro.multithread) 大部分信息应该都在这里
-- [memory ordering with atomic_flag spin lock - Stack Overflow](https://stackoverflow.com/questions/14791495/memory-ordering-with-atomic-flag-spin-lock) 我从这里知道 “对某一atomic的**RMW操作** 对于 其他在the-same-atomic上的操作 立即visible”
+- [[14882 § 30.4] - Order and consistency](http://eel.is/c++draft/atomics.order)
+- [The C++11 Memory Model and GCC - GCC Wiki](https://gcc.gnu.org/wiki/Atomic/GCCMM)
+- [Atomic/GCCMM/Optimizations/Details - GCC Wiki](https://gcc.gnu.org/wiki/Atomic/GCCMM/Optimizations/Details)
+- [memory ordering with atomic_flag spin lock - Stack Overflow](https://stackoverflow.com/questions/14791495/memory-ordering-with-atomic-flag-spin-lock) 才知道 “对某一atomic的**RMW操作**读到的是latest value
 - [Basic spin-lock mutex implementation ordering - Stack Overflow](https://stackoverflow.com/questions/30691135/basic-spin-lock-mutex-implementation-ordering) 问题同上（值得一看！！）
 - [Is memory_order_acquire really sufficient for locking a spinlock? - Stack Overflow](https://stackoverflow.com/questions/21536846/is-memory-order-acquire-really-sufficient-for-locking-a-spinlock) 问题同上
 - [Why it's termed read-modify-write but not read-write? - Stack Overflow](https://stackoverflow.com/questions/49452022/why-its-termed-read-modify-write-but-not-read-write)
 - [What do each memory_order mean? - Stack Overflow](https://stackoverflow.com/questions/12346487/what-do-each-memory-order-mean)
-- [如何理解 C++11 的六种 memory order？ - 知乎](https://www.zhihu.com/question/24301047) - 非常有价值的问题
+- [如何理解 C++11 的六种 memory order？ - 知乎](https://www.zhihu.com/question/24301047) 非常有价值的问题
 - 8.2.3 Examples Illustrating the Memory-Ordering Principles - *Intel 64 and IA-32 Architectures Software Developers Manual*
-- [The Happens-Before Relation](https://preshing.com/20130702/the-happens-before-relation/)
-- [Weak vs. Strong Memory Models](https://preshing.com/20120930/weak-vs-strong-memory-models/)
-- [Memory Reordering Caught in the Act](https://preshing.com/20120515/memory-reordering-caught-in-the-act/)
-- [Can Reordering of Release/Acquire Operations Introduce Deadlock?](https://preshing.com/20170612/can-reordering-of-release-acquire-operations-introduce-deadlock/)
+- [Preshing on Programming](https://preshing.com/)
+  - [Memory Reordering Caught in the Act](https://preshing.com/20120515/memory-reordering-caught-in-the-act/)
+  - [Memory Ordering at Compile Time](https://preshing.com/20120625/memory-ordering-at-compile-time/)
+  - [The Happens-Before Relation](https://preshing.com/20130702/the-happens-before-relation/)
+  - [The Synchronizes-With Relation](https://preshing.com/20130823/the-synchronizes-with-relation/)
+  - [Weak vs. Strong Memory Models](https://preshing.com/20120930/weak-vs-strong-memory-models/)
+  - [Can Reordering of Release/Acquire Operations Introduce Deadlock?](https://preshing.com/20170612/can-reordering-of-release-acquire-operations-introduce-deadlock/) 这个看得有点懵
+  - [The Purpose of memory_order_consume in C++11](https://preshing.com/20140709/the-purpose-of-memory_order_consume-in-cpp11/)
+  - [Memory Barriers Are Like Source Control Operations](https://preshing.com/20120710/memory-barriers-are-like-source-control-operations/) 不错
+  - [You Can Do Any Kind of Atomic Read-Modify-Write Operation](https://preshing.com/20150402/you-can-do-any-kind-of-atomic-read-modify-write-operation/)
+  - [An Introduction to Lock-Free Programming](https://preshing.com/20120612/an-introduction-to-lock-free-programming/)
+  - [Semaphores are Surprisingly Versatile](https://preshing.com/20150316/semaphores-are-surprisingly-versatile/) 不错
+- [What does `std::kill_dependency` do, and why would I want to use it? - Stack Overflow](https://stackoverflow.com/questions/7150395/what-does-stdkill-dependency-do-and-why-would-i-want-to-use-it)
 - [C++2011 Memory Model 笔记](http://blog.haohaolee.com/blog/2011/07/25/cpp2011-memory-model-notes/)
 - [C++11原子操作与无锁编程 - 知乎](https://zhuanlan.zhihu.com/p/24983412)
 - [ABA problem - Wikipedia](https://en.wikipedia.org/wiki/ABA_problem)
@@ -465,6 +489,10 @@ void thread2() {
 - [c++并发编程3. CAS原语 - 知乎](https://zhuanlan.zhihu.com/p/56055215)
 - [高并发编程--多处理器编程中的一致性问题(下) - 知乎](https://zhuanlan.zhihu.com/p/48161056)
 - [Fence和非原子操作的ordering](https://chaomai.github.io/2016/03/20/2016-2016-03-20-fence-and-ordering-nonatomic/)
+- [Who ordered memory fences on an x86?](https://bartoszmilewski.com/2008/11/05/who-ordered-memory-fences-on-an-x86/)
+- [Nine ways to break your systems code using volatile](https://blog.regehr.org/archives/28) 不错
+- [C++ Memory Model](https://www.think-cell.com/en/career/talks/pdf/think-cell_talk_memorymodel.pdf) 不错的总结
+- [Memory Barriers: a Hardware View for Software Hackers](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.152.5245&rep=rep1&type=pdf) 待看
 
 
 &nbsp;   
