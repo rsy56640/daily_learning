@@ -14,10 +14,11 @@ namespace DB::buffer
     using namespace page;
 
     struct PageListHandle {
-        page_id_t page_id_;
-        Page* page_;
         uint32_t ref_ = 0;              // HACK: scrutinize the property of thread-safe ???
+        page_id_t page_id_;
+        Page* page_;                    // `ref_count` of page might not equal the handle.
         bool in_lru_ = false;
+        bool in_page_list_ = false;
         PageListHandle* prev_hash_ = nullptr;
         PageListHandle* next_hash_ = nullptr;
         PageListHandle* prev_lru_ = nullptr;
@@ -34,7 +35,7 @@ namespace DB::buffer
         PageList();
         void append(PageListHandle*);
         void remove(PageListHandle*);
-        PageListHandle* find(page_id_t page_id) const;
+        PageListHandle* find_handle(page_id_t page_id) const;
         ~PageList();
     };
 
@@ -47,14 +48,12 @@ namespace DB::buffer
      */
     class Hash_LRU
     {
-        // hash function = (magic * key) & (bucket_num_ - 1);
+        // hash function = (magic * key) & (bucket_num_ - 1)
         static constexpr uint32_t init_bucket = 1 << 5;
         static constexpr uint32_t magic = 769;
 
         static constexpr uint32_t max_bucket = 1 << 10;
-        static constexpr uint32_t  lru_init_size = 1 << 7;
-
-        using bucket_it = std::list<Page*>::iterator;
+        static constexpr uint32_t  lru_init_size = 1 << 7; // 4 times of buckets number
 
     public:
 
@@ -78,6 +77,8 @@ namespace DB::buffer
         // return approximate size.
         uint32_t size() const;
 
+        uint32_t max_size() const;
+
 
     private:
         uint32_t bucket_num_;                       // the modification only in `rehash()`
@@ -85,7 +86,6 @@ namespace DB::buffer
         std::atomic<uint32_t> size_;
         mutable std::shared_mutex shared_mutex_;    // mutex for rehashing
         PageListHandle lru_head_;                   // dummy node, LRU is a cyclic list
-        uint32_t lru_size_;
         std::atomic<uint32_t> lru_max_size_;
         mutable std::mutex lru_mutex_;
 

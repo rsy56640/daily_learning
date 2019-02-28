@@ -1,38 +1,37 @@
 #include "include/hash_lru.h"
-#include <chrono>
 
 namespace DB::buffer
 {
 
     /****************  implementation for class PageList  ****************/
 
-    PageList::PageList() :size_(0), head_(NOT_A_PAGE, nullptr) {}
+    PageList::PageList() :size_(0), head_(page::NOT_A_PAGE, nullptr)
+    {
+        head_.prev_hash_ = &head_;
+        head_.next_hash_ = &head_;
+    }
 
     void PageList::append(PageListHandle* handle) {
-        size_++;
         handle->ref();
+        size_++;
+        handle->in_page_list_ = true;
         PageListHandle* old = head_.next_hash_;
-        if (old == nullptr) {
-            head_.next_hash_ = handle; handle->prev_hash_ = &head_;
-        }
-        else {
-            head_.next_hash_ = handle; handle->prev_hash_ = &head_;
-            handle->next_hash_ = old; old->prev_hash_ = handle;
-        }
+        head_.next_hash_ = handle; handle->prev_hash_ = &head_;
+        handle->next_hash_ = old; old->prev_hash_ = handle;
     }
 
     void PageList::remove(PageListHandle* handle) {
         size_--;
+        handle->in_page_list_ = false;
         PageListHandle* prev = handle->prev_hash_;
         PageListHandle* next = handle->next_hash_;
-        prev->next_hash_ = next;
-        if (next != nullptr) next->prev_hash_ = prev;
+        prev->next_hash_ = next; next->prev_hash_ = prev;
         handle->unref();
     }
 
-    PageListHandle* PageList::find(page_id_t page_id) const {
+    PageListHandle* PageList::find_handle(page_id_t page_id) const {
         PageListHandle* it = head_.next_hash_;
-        while (it != nullptr) {
+        while (it != &head_) {
             if (it->page_id_ == page_id) return it;
             it = it->next_hash_;
         }
@@ -41,7 +40,7 @@ namespace DB::buffer
 
     PageList::~PageList() {
         PageListHandle* it = head_.next_hash_;
-        while (it != nullptr) {
+        while (it != &head_) {
             PageListHandle* temp = it;
             it = it->next_hash_;
             temp->unref();
@@ -51,44 +50,59 @@ namespace DB::buffer
 
     /****************  implementation for class Hash_LRU  ****************/
 
-    using namespace std::literals::chrono_literals;
+    // HACK: potential optimization:
+    // make consensus with the caller on `page_id`,
+    // such that the data race will not happen on the same handle !!!
 
     Hash_LRU::Hash_LRU() :
         bucket_num_(Hash_LRU::init_bucket),
         buckets_(bucket_num_),
         size_(0),
-        lru_head_(NOT_A_PAGE, nullptr),
-        lru_size_(0),
+        lru_head_(page::NOT_A_PAGE, nullptr),
+        //lru_size_(0),
         lru_max_size_(lru_init_size)
     {
         lru_head_.next_lru_ = &lru_head_;
         lru_head_.prev_lru_ = &lru_head_;
     }
 
+    // `ref_count` in PageList is tracked automatically, we only manage `ref_count` in LRU.
+    // We manually manipulate `ref_count`, though, in some multi-thread conditions.
 
     bool Hash_LRU::insert(page_id_t page_id, Page* page)
     {
+        if (size() > max_size())
+            lru_evict();
+
         std::shared_lock<std::shared_mutex> lock(shared_mutex_);
 
         uint32_t _hash = hash(page_id);
         PageList& page_list = buckets_[_hash];
-
+        bool _rehash;
         PageListHandle* _page_handle = nullptr;
         PageListHandle* newHandle = nullptr;
 
         {
-            std::lock_guard<std::mutex> lg(page_list.mutex_);
-            _page_handle = page_list.find(page_id);
+            std::lock_guard<std::mutex> page_lg(page_list.mutex_);
+            _rehash = page_list.size_ > (bucket_num_ << 3);
+
+            _page_handle = page_list.find_handle(page_id);
             if (_page_handle != nullptr)
                 return false;
 
             newHandle = new PageListHandle(page_id, page);
             page_list.append(newHandle);
+        }
 
-            std::lock_guard<std::mutex> lg(lru_mutex_);
-            lru_size_++;
+        size_++;
+
+        {
+            std::lock_guard<std::mutex> lru_lg(lru_mutex_);
             lru_append(newHandle);
         }
+
+        if (_rehash)
+            rehash();
 
         return true;
     }
@@ -96,17 +110,22 @@ namespace DB::buffer
 
     bool Hash_LRU::insert_or_assign(page_id_t page_id, Page* page)
     {
+        if (size() > max_size())
+            lru_evict();
+
         std::shared_lock<std::shared_mutex> lock(shared_mutex_);
 
         uint32_t _hash = hash(page_id);
         PageList& page_list = buckets_[_hash];
-
+        bool _rehash;
         PageListHandle* _page_handle = nullptr;
         PageListHandle* newHandle = nullptr;
 
         {
-            std::lock_guard<std::mutex> lg(page_list.mutex_);
-            _page_handle = page_list.find(page_id);
+            std::lock_guard<std::mutex> page_lg(page_list.mutex_);
+            _rehash = page_list.size_ > (bucket_num_ << 3);
+
+            _page_handle = page_list.find_handle(page_id);
             if (_page_handle != nullptr)
             {
                 _page_handle->page_ = page;
@@ -115,11 +134,17 @@ namespace DB::buffer
 
             newHandle = new PageListHandle(page_id, page);
             page_list.append(newHandle);
+        }
 
-            std::lock_guard<std::mutex> lg(lru_mutex_);
-            lru_size_++;
+        size_++;
+
+        {
+            std::lock_guard<std::mutex> lru_lg(lru_mutex_);
             lru_append(newHandle);
         }
+
+        if (_rehash)
+            rehash();
 
         return true;
     }
@@ -133,24 +158,39 @@ namespace DB::buffer
         const PageList& page_list = buckets_[_hash];
 
         PageListHandle* _page_handle = nullptr;
+        Page* page_ptr = nullptr;
 
         // find the page and try to acquire the lock
         {
-            std::lock_guard<std::mutex> lg(page_list.mutex_);
+            std::lock_guard<std::mutex> page_lg(page_list.mutex_);
 
-            _page_handle = page_list.find(page_id);
+            _page_handle = page_list.find_handle(page_id);
 
             // return if no such page.
             if (_page_handle->page_ == nullptr)
                 return nullptr;
 
-            _page_handle->page_->ref();
+            page_ptr = _page_handle->page_;
+            page_ptr->ref();
 
-            std::lock_guard<std::mutex> lg(lru_mutex_);
+            // in case that the handle should be evited.
+            _page_handle->ref();
+        }
+
+        {
+            std::lock_guard<std::mutex> lru_lg(lru_mutex_);
+
+            if (_page_handle->in_lru_ == false)
+            {
+                _page_handle->unref(); // pairwise with the early `ref()`
+                return page_ptr;
+            }
+
+            _page_handle->unref(); // pairwise with the early `ref()`
             lru_update(_page_handle);
         }
 
-        return _page_handle->page_;
+        return page_ptr;
     }
 
 
@@ -165,32 +205,50 @@ namespace DB::buffer
 
         // remove handle from page_list
         {
-            std::lock_guard<std::mutex> lg(page_list.mutex_);
-            _page_handle = page_list.find(page_id);
+            std::lock_guard<std::mutex> page_lg(page_list.mutex_);
+            _page_handle = page_list.find_handle(page_id);
 
             if (_page_handle == nullptr)
                 return false;
 
             page_list.remove(_page_handle);
 
-            std::lock_guard<std::mutex> lg(lru_mutex_);
-
-            // If the handle is *evicted* in other thread
-            // after we remove it from page_list but before remove it from LRU,
-            // we check the whether the handle is in LRU.
-            if (_page_handle->in_lru_ == false)
-                return true;
-
-            lru_size_--;
-            lru_remove(_page_handle);
+            // `ref()` the handle here to extend its life
+            // at least after acquire the LRU_lock in case that:
+            // another thread attempts to evict the handle from LRU,
+            // if we leave this block, the `evict()` will do nothing but `unref()`,
+            // therefore the handle will be deleted.
+            _page_handle->ref();
         }
+
+        // remove handle from LRU
+        {
+            std::lock_guard<std::mutex> lru_lg(lru_mutex_);
+
+            if (_page_handle->in_lru_ == false)
+            {
+                // `size--` is in LRU
+                _page_handle->unref(); // pairwise with the early `ref()`
+                return true;
+            }
+            // `size--` is outside the block for less time of holding the lock.
+            lru_remove(_page_handle);
+
+            _page_handle->unref(); // pairwise with the early `ref()` 
+        }
+        size_--;
 
         return true;
     }
 
 
-    uint32_t Hash_LRU::size() const {
+    inline uint32_t Hash_LRU::size() const {
         return size_.load(std::memory_order_relaxed);
+    }
+
+
+    inline uint32_t Hash_LRU::max_size() const {
+        return lru_max_size_.load(std::memory_order_relaxed);
     }
 
 
@@ -203,11 +261,8 @@ namespace DB::buffer
         return (Hash_LRU::magic * page_id) & (bucket_num_ - 1);
     }
 
-    // TODO: rehash
-    /*
-     * Do not lock LRU !!!
-     *
-     */
+
+    // Do not lock LRU !!!
     void Hash_LRU::rehash()
     {
         // must immediately acquire the write-lock
@@ -216,7 +271,35 @@ namespace DB::buffer
         if (bucket_num_ >= Hash_LRU::max_bucket)
             return;
 
-    }
+        // `bucket number` and `lru_max_size` multiply by 2.
+        const uint32_t old_bucket_num_ = bucket_num_;
+        bucket_num_ <<= 1;
+        lru_max_size_.fetch_add(
+            lru_max_size_.load(std::memory_order_seq_cst),
+            std::memory_order_seq_cst);
+
+        // move the element into new buckets
+        buckets_.resize(bucket_num_);
+        for (uint32_t i = 0; i < old_bucket_num_; i++)
+        {
+            // we hold write-lock already.
+            PageList& page_list = buckets_[i];
+            PageList& new_page_list = buckets_[i + old_bucket_num_];
+            PageListHandle* it = page_list.head_.next_hash_;
+            while (it != &(page_list.head_))
+            {
+                PageListHandle* temp = it;
+                it = it->next_hash_;
+                if (i != hash(temp->page_id_))
+                {
+                    // `temp` will not be destructed in that we don't leave this block,
+                    // thus we do not need to `ref()` here.
+                    page_list.remove(temp);
+                    new_page_list.append(temp);
+                }
+            }
+        }
+    } // end function `void Hash_LRU::rehash()`
 
 
     void Hash_LRU::lru_append(PageListHandle* handle)
@@ -257,12 +340,39 @@ namespace DB::buffer
 
     void Hash_LRU::lru_evict()
     {
-        PageListHandle* victim = lru_head_.prev_lru_;
-        PageListHandle* last = victim->prev_lru_;
-        lru_head_.prev_lru_ = last; last->next_lru_ = &lru_head_;
-        victim->in_lru_ = false;
-        victim->unref();
-    }
+        page_id_t page_id;
+        PageListHandle* victim;
+
+        // if conflicts with `erase()`, no size decrement in `erase()`.
+        size_--;
+
+        {
+            std::lock_guard<std::mutex> lru_lg(lru_mutex_);
+
+            victim = lru_head_.prev_lru_;
+            PageListHandle* last = victim->prev_lru_;
+
+            lru_head_.prev_lru_ = last; last->next_lru_ = &lru_head_;
+
+            page_id = victim->page_id_;
+
+            victim->in_lru_ = false;
+            // victim->unref(); // must not do `unref` here, but later.
+        }
+
+        {
+            std::shared_lock<std::shared_mutex> lock(shared_mutex_);
+            PageList& page_list = buckets_[hash(page_id)];
+
+            std::lock_guard<std::mutex> page_lg(page_list.mutex_);
+
+            if (victim->in_page_list_)
+                page_list.remove(victim);
+
+            victim->unref(); // `unref` for LRU
+        }
+
+    } // end function `void Hash_LRU::lru_evict()`
 
 
 } // end namespace DB::buffer
