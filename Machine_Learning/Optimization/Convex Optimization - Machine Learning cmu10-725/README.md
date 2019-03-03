@@ -121,6 +121,68 @@ $$
 
 
 
+### 在凸集上封闭的运算
+
+#### 1. Intersection：凸集的交是凸集
+
+#### 2. 仿射变换（及其逆）
+
+
+
+### 常见凸函数
+
+二次型，均方损失函数，指数，对数，范数，
+
+凸集的示性函数，支撑函数，
+
+仿射变换（凸或凹）
+
+
+
+### 凸函数的重要性质
+
+#### 1. Epigraph characterization
+
+凸函数 <=> 函数图像上部区域是凸的
+
+#### 2. First-order characterization
+
+若 $f$ 可导，则 $f$ 为凸当且仅当 $dom(f)$ 为凸，并且
+$$
+f(y) \ge f(x) + \bigtriangledown f(x)^T (y-x),\qquad x,y\in dom(f)
+$$
+推论：对与可导凸函数 $f$，$\bigtriangledown f = 0 \Leftrightarrow x\ minimize\ f$
+
+#### 3. Second-order characterization
+
+若 $f$ 二阶可导，则 $f$ 为凸当且仅当 $dom(f)$ 为凸，并且
+$$
+\bigtriangledown^2 f(x) \succeq 0,\qquad x,y\in dom(f)
+$$
+（$A \succeq 0$ 表示 $A​$ 半正定）
+
+#### 4. Jensen’s inequality
+
+若 $f$ 为凸，$X$ 是 $dom(f)$ 上的随机变量，则
+$$
+f(E[X]) \le E[f(x)]
+$$
+
+
+### 保持凸性的运算
+
+1. 系数非负的线性组合
+2. Pointwise maximization：若干个凸函数的最大值（即凸集的交）
+3. Partial minimization：若 $g(x, y)$ 为凸，且 $C$ 为凸，那么
+
+$$
+f(x) = min_{y\in C}\ g(x, y)
+$$
+
+为凸。
+
+4. 仿射变换
+
 
 
 
