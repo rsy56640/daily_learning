@@ -75,7 +75,7 @@ $$
 \Rightarrow\ & f(x) && \le f(z)
 \end{alignat*}
 $$
-hence $x​$ is a global minima.
+hence $x$ is a global minima.
 
 
 
@@ -181,7 +181,7 @@ $$
 
 为凸。
 
-4. 仿射变换
+4. 仿射变换：$f$ 为凸 $\Rightarrow$ $f(Ax+b)$ 为凸
 
 
 
