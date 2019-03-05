@@ -27,13 +27,13 @@ $$
 & \qquad \qquad \quad\ \ h_j(x) = 0,\ j = 1,...r
 \end{aligned}
 $$
-This is a **convex optimization problem** provided the functions $f$ and $g_i$ are convex, and $h_j$ are affine:
+This is a **convex optimization problem** provided the functions $f​$ and $g_i​$ are convex, and $h_j​$ are affine:
 $$
 h_j(x) = a_j^T x + b_j
 $$
 For convex optimization problems, ***local minima are global minima***.
 
-> $x$ is feasible means $x \in D$
+> $x​$ is feasible means $x \in D,\ g_i(x)\le 0\ and\ h_j(x) = 0$
 
 #### 局部极小值就是全局极小值
 
@@ -83,7 +83,11 @@ hence $x$ is a global minima.
 $$
 x,y\in C \Rightarrow tx+(1-t)y \in C\quad for\ all\ 0 \le t \le 1
 $$
-**Convex Combination** of $x_1, x_2,...x_k \in R^n$:
+**Convex Functions**:
+$$
+f(tx+(1-t)y) \le tf(x) + (1-t)f(y) \quad for\ all\ 0 \le t \le 1
+$$
+**Convex Combination** of $x_1, x_2,...x_k \in R^n​$:
 $$
 \theta_1x_1 + ... + \theta_kx_k,\qquad \sum \theta_i = 1
 $$
@@ -131,11 +135,20 @@ $$
 
 ### 常见凸函数
 
-二次型，均方损失函数，指数，对数，范数，
+- 凹函数的反：$-f$
 
-凸集的示性函数，支撑函数，
-
-仿射变换（凸或凹）
+- 二次型：$Q \succeq 0 \quad \Rightarrow \quad \frac{1}{2}x^TQx + b^Tx + c$ 为凸
+- 均方损失函数：$||y-Ax||_2^2$，因为 $A^TA \succeq 0 $
+- 指数：$e^{ax}$
+- 幂函数
+  - 凸：$a\ge 1\ or\ a\le 0$
+  - 凹：$0\le a\le 1$
+- 对数：凹
+- 范数：$||x||_p = \sum_i (x_i^p)^{1/p}, \quad p\ge 1$
+- 凸集的示性函数
+- 支撑函数：$\forall C,\quad I_C(x) = max_{y\in C}\ x^Ty$ 为凸
+- 最大值函数：$f(x) = max\ \{x_1,...x_n\}$
+- 仿射函数：既凸又凹，$a^Tx+b$
 
 
 
@@ -159,7 +172,7 @@ $$
 $$
 \bigtriangledown^2 f(x) \succeq 0,\qquad x,y\in dom(f)
 $$
-（$A \succeq 0$ 表示 $A​$ 半正定）
+（$A \succeq 0​$ 表示 $A​$ 半正定）
 
 #### 4. Jensen’s inequality
 
@@ -167,6 +180,7 @@ $$
 $$
 f(E[X]) \le E[f(x)]
 $$
+
 
 
 ### 保持凸性的运算
@@ -182,9 +196,59 @@ $$
 为凸。
 
 4. 仿射变换：$f$ 为凸 $\Rightarrow$ $f(Ax+b)$ 为凸
+5. 复合函数:
+
+![](assets/General_Composition.png)
+
+6. Vector Composition:
+
+![](assets/Vector_Composition.png)
 
 
 
+### Optimization Terminology
+
+$$
+\begin{aligned}
+& min_{x\in D} \qquad f(x) \\
+& subject\ to \quad\ g_i(x) \le 0,\ i= 1,...m \\
+& \qquad \qquad \quad\ \ Ax = b
+\end{aligned}
+$$
+
+其中 $f$ 和 $g_i$ 均为凸，$D = dom(f) \cap \bigcap_i dom(g_i)$
+
+- $f$ 称为 目标函数
+- $g_i$ 称为 不等式约束
+- 若 $x\in D,\ g_i(x)\le 0\ and\ Ax = b$，则 $x$ 称为 *feasible point*
+- $f(x)$ 的最小值（若存在）记为 $f^* =f(x^*)$，$x^*$ 称为问题的解
+
+所有的解的集合记作 $X_{opt}$，则 $X_{opt}$ 是凸的。
+
+
+
+重写约束条件：
+$$
+min_x\ f(x)\quad subject\ to\ x\ in\ C
+$$
+其中 $C = \{ x: g_i(x)\le 0,\ Ax = b \}$ 是凸集
+
+
+
+### First-order optimality condition
+
+$$
+\bigtriangledown_{x^*}^T (x - x^*) \ge 0,\quad for\ all\ x\in C
+$$
+特别地，当 $C = R^n$ 时，有
+$$
+\bigtriangledown f(x^*) = 0
+$$
+*proof*:
+$$
+f(x) - f(x^*) = \bigtriangledown_{x^*}^T (x-x_0) + O(||x-x_0||^2)
+$$
+于是条件与 $x^*$ 为 *local minima* 等价，又注意到 *local minima* 也即是 *global minima*
 
 
 
