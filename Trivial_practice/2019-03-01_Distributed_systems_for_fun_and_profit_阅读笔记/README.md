@@ -5,9 +5,10 @@
 
 - [1. Distributed systems at a high level](#1)
 - [2. Up and down the level of abstraction](#2)
-- [](#3)
+- [3. Time and order](#3)
 - [](#4)
 - [](#5)
+
 
 &nbsp;   
 <a id="1"></a>
@@ -96,15 +97,54 @@ consensus：
   - Causal Consistency: Strongest Model Available
   - Eventual Consistency Model
 
-参考：
-
-- [FLP Impossibility](https://blog.csdn.net/chen77716/article/details/27963079)
-
 
 &nbsp;   
 <a id="3"></a>
-##[]()
+##[3. Time and order](http://book.mixu.net/distsys/time.html)
 
+- 偏序（partial order）而非全序（total orer）
+- timestamp 可以强加一个 order
+
+#### global clock
+- 假定所有 nodes 上的 clock 都是 sync
+- 注意 clock drift
+- Google/Spanner TrueTime API
+
+#### local clock
+- each machine has its own clock
+- partial order
+
+#### no clock
+- vector clocks
+
+### Vector Clocks
+
+#### Lamport clock
+- 每个进程有 timestamp，每次 +1
+- 只能表示单一时间线，不同历史会冲突，比较不同分支的 timestamp 没有任何意义
+
+#### Vector clock
+- 每个进程有 一组timestamp，表示所有的 node
+
+![](assets/vector_clock.png)
+
+### Failure detectors (time for cutoff)
+
+常用 **heartbeat message** 和 timeout 实现，failure detectors 有两条准则：
+
+- Completeness
+  - Strong：任何 crashed进程 eventually 被 correct进程 suspect
+  - Weak：任何 crashed进程 eventually 被 some correct进程 suspect
+- Accuracy
+  - Strong：没有错查的
+  - Weak：有错查（correct进程 被 suspect）
+
+Completeness 相对容易， weak 可以 广播 suspected进程 从而变为 strong；因此我们主要关注 Accuracy（困难在于 message delay）   
+如果系统想要 strong consistency，那么 failure detect 就非常重要了。因为 crashed nodes 可以被忽略，而 partition 不行。
+
+### Time, Order and Performance
+
+实现 total order 的简单方法是：选一个 leader，所有的任务都要经过这个 leader
 
 
 &nbsp;   
