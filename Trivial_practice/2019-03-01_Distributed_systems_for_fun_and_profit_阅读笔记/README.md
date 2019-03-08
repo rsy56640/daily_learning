@@ -6,8 +6,12 @@
 - [1. Distributed systems at a high level](#1)
 - [2. Up and down the level of abstraction](#2)
 - [3. Time and order](#3)
-- [](#4)
+- [4. Replication](#4)
 - [](#5)
+
+可参考笔记：
+
+- [随笔分类 - 分布式系统](https://www.cnblogs.com/lichen782/category/999910.html)
 
 
 &nbsp;   
@@ -149,8 +153,59 @@ Completeness 相对容易， weak 可以 广播 suspected进程 从而变为 str
 
 &nbsp;   
 <a id="4"></a>
-##[]()
+##[4. Replication](http://book.mixu.net/distsys/replication.html)
 
+- 做 replication 和 response 的时机 —— durability / consistency
+- 对 divergence 的容忍程度
+
+维护 single-copy consistence 的算法：
+
+- 1n messages (asynchronous primary/backup)
+- 2n messages (synchronous primary/backup)
+- 4n messages (2-phase commit, Multi-Paxos)
+- 6n messages (3-phase commit, Paxos with repeated leader election)
+
+![](assets/google-transact09.png)
+
+### 主从复制 P/B
+- 所有 update 在 primary 上做，log 通过网络传给 backup
+- 同步：需要等待 backup 回复；并且也有可能不一致（backup 回复 ACK时，primary fail）
+- 异步：weak durability guarantees
+
+### 两阶段提交 2PC
+- 第一阶段（voting）：*协调者* 给所有 *参与者* 发送update，*参与者* 投票决定是否 commit（如果决定 commit，结果放在 WAL）
+- 第二阶段（decision）：*协调者* 决定结果并通知 *参与者*，*参与者* 根据决定做 update
+- 允许 rollback
+- 属于CA，对 network partition 没有容错
+
+### 对网络分割的容错的一致性算法
+- 难以区分 network partition 和 node failure
+- 多数决策（major decision）
+
+在 Paxos 和 Raft 中，每一轮（epoch）是两次选举的间隔（包含 election 和之后的 normal operation）
+
+![](assets/epoch.png)
+
+> 这块的内容，目前对于 value 和 number of proposal 还不是很了解
+
+### 强一致性的 replication 算法
+
+- 主从
+  - 单一、静态 master
+  - slaves 值拷贝 log，不参与具体操作
+  - replication delay 无限制
+  - 对 network partition 无容错
+  - 人工恢复错误
+- 2PC
+  - 全票通过：commt 或 abort
+  - 静态 master
+  - coordinator 和 node 同时 fail，就挂了
+  - 对 network partition 无容错
+- Paxos
+  - 多数投票
+  - 动态 master
+  - 只要一半以上没fail就正常
+  - latency
 
 
 &nbsp;   
