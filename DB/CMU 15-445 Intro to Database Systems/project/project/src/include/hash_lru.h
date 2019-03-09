@@ -53,6 +53,7 @@ namespace DB::buffer
         static constexpr uint32_t magic = 769;
 
         static constexpr uint32_t max_bucket = 1 << 10;
+        static constexpr uint32_t rehash_ratio = 3;
         static constexpr uint32_t  lru_init_size = 1 << 7; // 4 times of buckets number
 
     public:

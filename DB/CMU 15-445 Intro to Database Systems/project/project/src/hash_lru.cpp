@@ -74,31 +74,33 @@ namespace DB::buffer
         if (size() > max_size())
             lru_evict();
 
-        std::shared_lock<std::shared_mutex> lock(shared_mutex_);
-
-        uint32_t _hash = hash(page_id);
-        PageList& page_list = buckets_[_hash];
         bool _rehash;
-        PageListHandle* _page_handle = nullptr;
-        PageListHandle* newHandle = nullptr;
-
         {
-            std::lock_guard<std::mutex> page_lg(page_list.mutex_);
-            _rehash = page_list.size_ > (bucket_num_ << 3);
+            std::shared_lock<std::shared_mutex> lock(shared_mutex_);
 
-            _page_handle = page_list.find_handle(page_id);
-            if (_page_handle != nullptr)
-                return false;
+            uint32_t _hash = hash(page_id);
+            PageList& page_list = buckets_[_hash];
+            PageListHandle* _page_handle = nullptr;
+            PageListHandle* newHandle = nullptr;
 
-            newHandle = new PageListHandle(page_id, page);
-            page_list.append(newHandle);
-        }
+            {
+                std::lock_guard<std::mutex> page_lg(page_list.mutex_);
+                _rehash = page_list.size_ > (bucket_num_ << rehash_ratio);
 
-        size_++;
+                _page_handle = page_list.find_handle(page_id);
+                if (_page_handle != nullptr)
+                    return false;
 
-        {
-            std::lock_guard<std::mutex> lru_lg(lru_mutex_);
-            lru_append(newHandle);
+                newHandle = new PageListHandle(page_id, page);
+                page_list.append(newHandle);
+            }
+
+            size_++;
+
+            {
+                std::lock_guard<std::mutex> lru_lg(lru_mutex_);
+                lru_append(newHandle);
+            }
         }
 
         if (_rehash)
@@ -113,34 +115,36 @@ namespace DB::buffer
         if (size() > max_size())
             lru_evict();
 
-        std::shared_lock<std::shared_mutex> lock(shared_mutex_);
-
-        uint32_t _hash = hash(page_id);
-        PageList& page_list = buckets_[_hash];
         bool _rehash;
-        PageListHandle* _page_handle = nullptr;
-        PageListHandle* newHandle = nullptr;
-
         {
-            std::lock_guard<std::mutex> page_lg(page_list.mutex_);
-            _rehash = page_list.size_ > (bucket_num_ << 3);
+            std::shared_lock<std::shared_mutex> lock(shared_mutex_);
 
-            _page_handle = page_list.find_handle(page_id);
-            if (_page_handle != nullptr)
+            uint32_t _hash = hash(page_id);
+            PageList& page_list = buckets_[_hash];
+            PageListHandle* _page_handle = nullptr;
+            PageListHandle* newHandle = nullptr;
+
             {
-                _page_handle->page_ = page;
-                return false;
+                std::lock_guard<std::mutex> page_lg(page_list.mutex_);
+                _rehash = page_list.size_ > (bucket_num_ << rehash_ratio);
+
+                _page_handle = page_list.find_handle(page_id);
+                if (_page_handle != nullptr)
+                {
+                    _page_handle->page_ = page;
+                    return false;
+                }
+
+                newHandle = new PageListHandle(page_id, page);
+                page_list.append(newHandle);
             }
 
-            newHandle = new PageListHandle(page_id, page);
-            page_list.append(newHandle);
-        }
+            size_++;
 
-        size_++;
-
-        {
-            std::lock_guard<std::mutex> lru_lg(lru_mutex_);
-            lru_append(newHandle);
+            {
+                std::lock_guard<std::mutex> lru_lg(lru_mutex_);
+                lru_append(newHandle);
+            }
         }
 
         if (_rehash)
@@ -171,9 +175,9 @@ namespace DB::buffer
                 return nullptr;
 
             page_ptr = _page_handle->page_;
-            page_ptr->ref();
 
-            // in case that the handle should be evited.
+            // in case that handle should be evited and page was ref to 0.
+            page_ptr->ref();
             _page_handle->ref();
         }
 
@@ -252,11 +256,9 @@ namespace DB::buffer
     }
 
 
-    /*
-     * The read of `bucket_num_` does not contend with modifying it in `rehash()`.
-     * Becase the modification must acquire the write-lock,
-     * thus any find/insert/erase call will block.
-     */
+    // The read of `bucket_num_` does not contend with modifying it in `rehash()`.
+    // Becase the modification must acquire the write-lock,
+    // thus any find/insert/erase call will block.
     inline uint32_t Hash_LRU::hash(page_id_t page_id) const noexcept {
         return (Hash_LRU::magic * page_id) & (bucket_num_ - 1);
     }
