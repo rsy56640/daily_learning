@@ -137,7 +137,7 @@ $$
 
 - 凹函数的反：$-f$
 
-- 二次型：$Q \succeq 0 \quad \Rightarrow \quad \frac{1}{2}x^TQx + b^Tx + c$ 为凸
+- 二次型（半正定）：$Q \succeq 0 \quad \Rightarrow \quad \frac{1}{2}x^TQx + b^Tx + c$ 为凸
 - 均方损失函数：$||y-Ax||_2^2$，因为 $A^TA \succeq 0 $
 - 指数：$e^{ax}$
 - 幂函数
@@ -216,9 +216,9 @@ $$
 \end{aligned}
 $$
 
-其中 $f$ 和 $g_i$ 均为凸，$D = dom(f) \cap \bigcap_i dom(g_i)$
+其中 $f$ 和 $g_i$ 均为凸，$D = dom(f) \cap \bigcap_i dom(g_i)​$
 
-- $f$ 称为 目标函数
+- $f​$ 称为 目标函数
 - $g_i$ 称为 不等式约束
 - 若 $x\in D,\ g_i(x)\le 0\ and\ Ax = b$，则 $x$ 称为 *feasible point*
 - $f(x)$ 的最小值（若存在）记为 $f^* =f(x^*)$，$x^*$ 称为问题的解
@@ -240,7 +240,7 @@ $$
 $$
 \bigtriangledown_{x^*}^T (x - x^*) \ge 0,\quad for\ all\ x\in C
 $$
-特别地，当 $C = R^n$ 时，有
+特别地，当 $C = R^n​$ 时，有
 $$
 \bigtriangledown f(x^*) = 0
 $$
