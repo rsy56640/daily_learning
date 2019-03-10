@@ -7,7 +7,7 @@
 - [2. Up and down the level of abstraction](#2)
 - [3. Time and order](#3)
 - [4. Replication](#4)
-- [](#5)
+- [5. Replication: weak consistency model protocols](#5)
 
 可参考笔记：
 
@@ -153,7 +153,7 @@ Completeness 相对容易， weak 可以 广播 suspected进程 从而变为 str
 
 &nbsp;   
 <a id="4"></a>
-##[4. Replication](http://book.mixu.net/distsys/replication.html)
+## [4. Replication](http://book.mixu.net/distsys/replication.html)
 
 - 做 replication 和 response 的时机 —— durability / consistency
 - 对 divergence 的容忍程度
@@ -210,5 +210,48 @@ Completeness 相对容易， weak 可以 广播 suspected进程 从而变为 str
 
 &nbsp;   
 <a id="5"></a>
-##[]()
+## [5. Replication: weak consistency model protocols](http://book.mixu.net/distsys/eventual.html)
 
+维护 single-copy consistence 过于昂贵，放弃复杂的 coordination
+
+最终一致性（Eventual Consistency）：节点可以在某些时段有分歧，但最终达成一致
+
+客户端计算 key 所在的 node
+
+quorum 是 node 的集合，两两 quorum 有交集
+
+读操作请求的 node 数量记为 `R`；写操作请求的 node 数量记为 `W`   
+一般 `R + W > N`，注意这并不蕴含 strong consistency
+
+最终一致性允许 divergence，读修复手段：
+1. no metadata
+2. timestamp
+3. 版本号
+4. vector clock
+
+### Replica Synchronization
+
+### CRDTs: Convergent replicated data types
+
+半格：幂等的交换半群
+
+- 结合性：分组无关
+- 可交换：顺序无关
+- 幂等行：重复无关
+
+满足半格通常需要一些约束：
+
+- 计数器
+  - 单增
+  - 增量 + 减量
+- 寄存器
+  - 单值：最后写获胜
+  - 多值：vector clocks
+- 集合
+  - 只添加
+  - 增/删 分开
+  - 最后写获胜
+  - 计数器
+- 图和文本序列
+
+后面讲了很多关于 Monotony 的东西，不过都是蜻蜓点水，没有从数学上去探讨这些操作的性质
