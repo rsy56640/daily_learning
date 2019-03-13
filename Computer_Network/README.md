@@ -416,7 +416,9 @@ TCP头长度固定 20B
 - &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp; <= &nbsp;&nbsp;&nbsp;&nbsp; [FIN (SEQ=w, ACK=u+1)]
 - [(SEQ=u+1, ACK=w+1)] &nbsp;&nbsp;&nbsp; =>
 
-![](assets/TCP_FSM.png)
+![](assets/TCP_FSM.png)   
+![](assets/tcpfsm.gif)   
+![](assets/tcpfsm2.png)   
 
 ### [2-12. Transport (recap)](https://www.youtube.com/watch?v=vtJ2JzhWTsk)
 
