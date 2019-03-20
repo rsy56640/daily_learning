@@ -295,6 +295,7 @@ namespace DB::buffer
                 if (i != hash(temp->page_id_))
                 {
                     // `temp` will not be destructed in that we don't leave this block,
+                    // `lru_evict()` does not `unref()` until erase the handle in hash-table,
                     // thus we do not need to `ref()` here.
                     page_list.remove(temp);
                     new_page_list.append(temp);

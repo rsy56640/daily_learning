@@ -93,7 +93,7 @@ namespace DB::buffer
         uint32_t hash(page_id_t) const noexcept;
 
         // `bucket_num_` and `lru_max_size_` will be multiplied by 2.
-        // the hash table will be locked during rehashing.
+        // the hash-table will be locked during rehashing, while lru-list won't.
         void rehash();
 
         // append a new handle into lru list.

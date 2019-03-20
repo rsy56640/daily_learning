@@ -1,3 +1,15 @@
+// each page is of 1KB size,
+// ______  ______  ______  ______
+// | 1KB | | 1KB | | 1KB | | 1KB |
+//  ~~~~~~  ~~~~~~  ~~~~~~  ~~~~~~
+// the first page is special, in which stores the metadata of the whole file.
+// page_no starts from 1.
+//
+//
+//
+//
+//
+//
 #ifndef _PAGE_H
 #include "env.h"
 #include <mutex>
@@ -5,6 +17,8 @@
 
 namespace DB::page
 {
+
+    constexpr std::size_t PAGE_SIZE = 1 << 10; // 1KB
 
     struct page_t_t {
         enum {
