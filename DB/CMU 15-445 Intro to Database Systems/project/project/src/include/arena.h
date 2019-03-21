@@ -1,5 +1,6 @@
 // refer to https://github.com/google/leveldb/blob/master/util/arena.h
 #ifndef _ARENA_H
+#define _ARENA_H
 #include <deque>
 #include <atomic>
 

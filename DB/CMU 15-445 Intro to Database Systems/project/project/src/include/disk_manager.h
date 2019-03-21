@@ -1,4 +1,5 @@
 #ifndef _DISK_MANAGER_H
+#define _DISK_MANAGER_H
 #include "page.h"
 #include "env.h"
 #include <fstream>

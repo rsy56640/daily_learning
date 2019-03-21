@@ -1,4 +1,5 @@
 #ifndef _DBIMPL_H
+#define _DBIMPL_H
 
 namespace DB
 {

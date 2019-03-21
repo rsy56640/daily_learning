@@ -78,7 +78,7 @@ namespace DB::buffer
         {
             std::shared_lock<std::shared_mutex> lock(shared_mutex_);
 
-            uint32_t _hash = hash(page_id);
+            const uint32_t _hash = hash(page_id);
             PageList& page_list = buckets_[_hash];
             PageListHandle* _page_handle = nullptr;
             PageListHandle* newHandle = nullptr;
@@ -119,7 +119,7 @@ namespace DB::buffer
         {
             std::shared_lock<std::shared_mutex> lock(shared_mutex_);
 
-            uint32_t _hash = hash(page_id);
+            const uint32_t _hash = hash(page_id);
             PageList& page_list = buckets_[_hash];
             PageListHandle* _page_handle = nullptr;
             PageListHandle* newHandle = nullptr;
@@ -154,7 +154,7 @@ namespace DB::buffer
     }
 
 
-    Page* Hash_LRU::find(page_id_t page_id)
+    Page* Hash_LRU::find(page_id_t page_id, const bool update)
     {
         std::shared_lock<std::shared_mutex> lock(shared_mutex_);
 
@@ -191,7 +191,9 @@ namespace DB::buffer
             }
 
             _page_handle->unref(); // pairwise with the early `ref()`
-            lru_update(_page_handle);
+
+            if (update)
+                lru_update(_page_handle);
         }
 
         return page_ptr;

@@ -1,4 +1,5 @@
 #ifndef _XJBDB_H
+#define _XJBDB_H
 
 namespace xjbDB
 {

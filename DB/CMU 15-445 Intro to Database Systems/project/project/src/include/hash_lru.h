@@ -1,4 +1,5 @@
 #ifndef _HASH_TABLE_H
+#define _HASH_TABLE_H
 #include <deque>
 #include <list>
 #include <iterator>
@@ -16,14 +17,14 @@ namespace DB::buffer
     struct PageListHandle {
         uint32_t ref_ = 0;              // HACK: scrutinize the property of thread-safe ???
         page_id_t page_id_;
-        Page* page_;                    // `ref_count` of page might not equal the handle.
+        page::Page* page_;              // `ref_count` of page might not equal the handle.
         bool in_lru_ = false;
         bool in_page_list_ = false;
         PageListHandle* prev_hash_ = nullptr;
         PageListHandle* next_hash_ = nullptr;
         PageListHandle* prev_lru_ = nullptr;
         PageListHandle* next_lru_ = nullptr;
-        PageListHandle(page_id_t page_id, Page* page) :page_id_(page_id), page_(page) {}
+        PageListHandle(page_id_t page_id, page::Page* page) :page_id_(page_id), page_(page) {}
         void ref() { page_->ref(); ref_++; }
         void unref() { page_->unref(); if (--ref_ == 0) delete this; }
     };
@@ -61,15 +62,16 @@ namespace DB::buffer
         Hash_LRU();
 
         // return true on success, false if the key does exist.
-        bool insert(page_id_t, Page*);
+        bool insert(page_id_t, page::Page*);
 
         // return false if the key does exist, 
         // after this call, the corresponding value of that page_id must be the Page* given.
-        bool insert_or_assign(page_id_t, Page*);
+        bool insert_or_assign(page_id_t, page::Page*);
 
         // return the corresponding Page if the key does exist, nullprt otherwise.
-        // the Page* is `ref()` before return. (to avoid the )
-        Page* find(page_id_t);
+        // the Page* is `ref()` before return and updated to the lru head.
+        // note that the Page* might be evicted from lru.
+        page::Page* find(page_id_t, const bool update = true);
 
         // return true on success, false if no such key.
         // after this call, the hash table does not contain such key.

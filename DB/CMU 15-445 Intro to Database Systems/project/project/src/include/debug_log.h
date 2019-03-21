@@ -1,4 +1,5 @@
 #ifndef _DEBUG_LOG_H
+#define _DEBUG_LOG_H
 
 namespace DB::debug
 {
@@ -7,6 +8,6 @@ namespace DB::debug
 
 
 
-} // end namespace DB::
+} // end namespace DB::debug
 
 #endif // !_DEBUG_LOG_H
