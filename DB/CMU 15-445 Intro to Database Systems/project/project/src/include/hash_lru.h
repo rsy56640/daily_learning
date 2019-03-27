@@ -15,7 +15,7 @@ namespace DB::buffer
     using namespace page;
 
     struct PageListHandle {
-        uint32_t ref_ = 0;              // HACK: scrutinize the property of thread-safe ???
+        std::atomic<uint32_t> ref_ = 0;
         page_id_t page_id_;
         page::Page* page_;              // `ref_count` of page might not equal the handle.
         bool in_lru_ = false;

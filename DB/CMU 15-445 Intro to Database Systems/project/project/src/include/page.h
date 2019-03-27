@@ -20,7 +20,7 @@ namespace DB::disk { class DiskManager; }
 namespace DB::page
 {
 
-    inline constexpr std::size_t PAGE_SIZE = 1 << 10; // 1KB
+    constexpr std::size_t PAGE_SIZE = 1 << 10; // 1KB
 
     enum class page_t_t {
         free,             //
@@ -32,7 +32,7 @@ namespace DB::page
     // use 32 bit integer to represent the page_id.
     // page_id must start from 1.
     using page_id_t = uint32_t;
-    inline constexpr page_id_t NOT_A_PAGE = 0;
+    constexpr page_id_t NOT_A_PAGE = 0;
 
 
     // parse buffer[PAGE_SIZE] into a Page*
