@@ -1,10 +1,22 @@
 #ifndef _BPLUSTREE_H
 #include "page.h"
+#include <string>
 
 namespace DB::disk { class DiskManager; }
 namespace DB::tree
 {
     using namespace page;
+
+    struct KVEntry {
+        KeyEntry kEntry;
+        ValueEntry vEntry;
+    };
+
+    // -1 if KVEntry < keys[index]
+    // 0 if equal
+    // 1 if KVEntry > keys[index]
+    int32_t compare(const KVEntry&, uint32_t key_index, const BTreePage *);
+
 
     class BTree
     {
@@ -32,7 +44,7 @@ namespace DB::tree
         void BT_create();
 
         // Page* has been `ref()` before return.
-        BTreePage * allocate_node(page_t_t);
+        BTreePage * allocate_node(page_t_t, BTreePage* parent);
 
         bool key_comp(uint32_t key1, uint32_t key2); // pageid ??
 

@@ -28,7 +28,10 @@ namespace DB::page
         if (!isInit) {
             write_int(data_ + offset::PAGE_T, static_cast<uint32_t>(page_t_));
             write_int(data_ + offset::PAGE_ID, page_id_);
-            write_int(data_ + offset::PARENT_PAGE_ID, parent_->get_page_id());
+            if (parent_ == nullptr)
+                write_int(data_ + offset::PARENT_PAGE_ID, NOT_A_PAGE);
+            else
+                write_int(data_ + offset::PARENT_PAGE_ID, parent_->get_page_id());
             write_int(data_ + offset::NENTRY, nEntry_);
             dirty_ = true;
         }
@@ -123,7 +126,8 @@ namespace DB::page
     //
     BTreePage::BTreePage(page_t_t page_t, page_id_t page_id, BTreePage* parent, uint32_t nEntry,
         disk::DiskManager* disk_manager, key_t_t key_t, uint32_t str_len, bool isInit)
-        :Page(page_t, page_id, parent, nEntry, disk_manager, isInit), key_t_(key_t), str_len_(str_len)
+        :Page(page_t, page_id, parent, nEntry, disk_manager, isInit),
+        key_t_(key_t), str_len_(str_len), last_offset_(PAGE_SIZE)
     {
         keys_ = new uint32_t[(BTdegree << 1) - 1];
         if (!isInit) {
@@ -136,6 +140,24 @@ namespace DB::page
     {
         delete[] keys_;
     }
+
+
+    void BTreePage::insert_key(uint32_t index, const KeyEntry& kEntry) {
+        if (key_t_ == key_t_t::INTEGER)
+        {
+            keys_[index] = kEntry.key_int;
+        }
+        else // key is str.
+        {
+            const uint32_t str_size = kEntry.key_str.size();
+            const uint32_t begin = last_offset_ - 1 - str_size;
+            std::memcpy(data_ + begin, kEntry.key_str.c_str(), str_size);
+            data_[last_offset_ - 1] = '\0';
+            last_offset_ -= 1 + str_size;
+        }
+        dirty_ = true;
+    }
+
 
 
     //
@@ -214,6 +236,16 @@ namespace DB::page
 
     LeafPage::~LeafPage() {
         value_page_->unref();
+    }
+
+    bool LeafPage::insert_value(uint32_t index, const char* content, uint32_t size) {
+        const uint32_t offset = value_page_->write_content(content, size);
+        if (offset != INVALID_OFFSET)
+            values_[index] = offset;
+        else
+            return false;
+        dirty_ = true;
+        return true;
     }
 
     void LeafPage::update_data()

@@ -136,23 +136,34 @@ namespace DB::page
     constexpr uint32_t MAX_STR_LEN = 57u;
 
 
+    struct KeyEntry {
+        key_t_t key_t;
+        uint32_t key_int;
+        std::string key_str; // <=57B
+    };
+
+
     // for ROOT, INTERNAL, LEAF
     class BTreePage :public Page {
+        friend class DB::tree::BTree;
     public:
 
+        // insert key at `index`.
+        void insert_key(uint32_t index, const KeyEntry&);
+
+    protected:
         BTreePage(page_t_t, page_id_t, BTreePage*, uint32_t nEntry, disk::DiskManager*,
             key_t_t, uint32_t str_len, bool isInit);
         ~BTreePage();
 
-        // the caller ensures that the BTreePage* won't be deleted when in this function,
-        // that means the caller had better `ref()` the BTreePage*.
-        // `ref()` the parent at first.
-        //void set_parent(BTreePage*);
-
-    protected:
         const key_t_t key_t_;
         const uint32_t str_len_;
         uint32_t * keys_;    // nEntry
+
+        uint32_t last_offset_; // used for CHAR-key, insert ** from bottom to up **,
+                               // denotes the last front offset, initialized as `PAGE_SIZE`.
+                               // It means data_[last_offset_-1] == '\0' for the next key-str.
+                               // *** not record on disk, recovered when read this page. ***
 
     }; // end class BTreePage
 
@@ -218,6 +229,9 @@ namespace DB::page
         LeafPage(page_id_t, BTreePage*, uint32_t nEntry, disk::DiskManager*, key_t_t,
             uint32_t str_len = 0, bool isInit = false);
         virtual ~LeafPage();
+
+        // return true on success, insert value at `index`.
+        bool insert_value(uint32_t index, const char* content, uint32_t size);
 
         // update the all metadata into memory, for the later `flush()`.
         virtual void update_data();
