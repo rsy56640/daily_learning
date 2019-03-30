@@ -1,6 +1,8 @@
 #include "include/page.h"
 #include "include/disk_manager.h"
 #include <cstring>
+#include <vector>
+#include <algorithm>
 
 namespace DB::page
 {
@@ -127,9 +129,9 @@ namespace DB::page
     BTreePage::BTreePage(page_t_t page_t, page_id_t page_id, BTreePage* parent, uint32_t nEntry,
         disk::DiskManager* disk_manager, key_t_t key_t, uint32_t str_len, bool isInit)
         :Page(page_t, page_id, parent, nEntry, disk_manager, isInit),
-        key_t_(key_t), str_len_(str_len), last_offset_(PAGE_SIZE)
+        key_t_(key_t), str_len_(str_len)//, last_offset_(PAGE_SIZE)
     {
-        keys_ = new uint32_t[(BTdegree << 1) - 1];
+        keys_ = new uint32_t[BTNodeKeySize];
         if (!isInit) {
             write_int(data_ + offset::KEY_T, static_cast<uint32_t>(key_t_));
             write_int(data_ + offset::STR_LEN, str_len_);
@@ -142,22 +144,46 @@ namespace DB::page
     }
 
 
-    void BTreePage::insert_key(uint32_t index, const KeyEntry& kEntry) {
+    void BTreePage::insert_key(uint32_t index, const KeyEntry& kEntry)
+    {
         if (key_t_ == key_t_t::INTEGER)
         {
             keys_[index] = kEntry.key_int;
         }
         else // key is str.
         {
-            const uint32_t str_size = kEntry.key_str.size();
-            const uint32_t begin = last_offset_ - 1 - str_size;
-            std::memcpy(data_ + begin, kEntry.key_str.c_str(), str_size);
-            data_[last_offset_ - 1] = '\0';
-            last_offset_ -= 1 + str_size;
+            // find a `OBSOLETE` record.
+            uint32_t keyStrIndex = 0;
+            for (; keyStrIndex < BTNodeKeySize; keyStrIndex++)
+                if (data_[KEY_STR_START + keyStrIndex * KEY_STR_BLOCK]
+                    == static_cast<char>(key_str_state::OBSOLETE))
+                    break;
+            const uint32_t offset = KEY_STR_START + keyStrIndex * KEY_STR_BLOCK;
+            keys_[index] = offset; // update key-index
+            data_[offset] = static_cast<char>(key_str_state::INUSED);
+            const uint32_t min_size =
+                MAX_STR_LEN > kEntry.key_str.size() ? kEntry.key_str.size() : MAX_STR_LEN;
+            std::memcpy(data_ + offset + 1, kEntry.key_str.c_str(), min_size);
         }
         dirty_ = true;
     }
 
+
+    void BTreePage::erase_key(const uint32_t index)
+    {
+        dirty_ = true;
+
+        // remove the value-str on leaf-node.
+        if (page_t_ == page_t_t::LEAF)
+            static_cast<LeafPage*>(this)->erase_value(index);
+
+        // if key is (VAR)CHAR attached at the end.
+        if (key_t_ != key_t_t::INTEGER)
+        {
+            const uint32_t offset = keys_[index];
+            data_[offset] = static_cast<char>(key_str_state::OBSOLETE);
+        }
+    }
 
 
     //
@@ -167,7 +193,7 @@ namespace DB::page
         disk::DiskManager* disk_manager, key_t_t key_t, uint32_t str_len, bool isInit)
         :BTreePage(page_t, page_id, parent, nEntry, disk_manager, key_t, str_len, isInit)
     {
-        branch_ = new Page*[BTdegree << 1];
+        branch_ = new Page*[BTNodeBranchSize];
     }
 
     InternalPage::~InternalPage()
@@ -188,32 +214,40 @@ namespace DB::page
     //
     ValuePage::ValuePage(page_id_t page_id, BTreePage* parent, uint32_t nEntry,
         disk::DiskManager* disk_manager, bool isInit)
-        :Page(page_t_t::VALUE, page_id, parent, nEntry, disk_manager, isInit), cur_(offset::CUR)
+        :Page(page_t_t::VALUE, page_id, parent, nEntry, disk_manager, isInit)//, cur_(offset::CUR)
     {
         if (!isInit) {
-            write_int(data_ + offset::CUR, offset::CUR);
+            // write_int(data_ + offset::CUR, offset::CUR);
         }
     }
 
-    ValueEntry ValuePage::read_content(uint32_t offset)
+    ValueEntry ValuePage::read_content(uint32_t index)
     {
+        const uint32_t offset = index * TUPLE_BLOCK_SIZE;
         ValueEntry vEntry;
         vEntry.value_state_ = static_cast<value_state>(data_[offset]);
-        vEntry.content_ = std::string_view(data_ + offset + 1);
+        std::memcpy(vEntry.content_, data_ + offset + 1, TUPLE_BLOCK_SIZE - 1);
         return vEntry;
     }
 
     uint32_t ValuePage::write_content(const char* content, uint32_t size)
     {
-        if (size > MAX_STR_LEN) return INVALID_OFFSET;
-        data_[cur_] = static_cast<char>(value_state::INUSED);
-        memcpy(data_ + cur_ + 1, content, size);
-        data_[cur_ + size + 1] = '\0';
-        uint32_t ret_offset = cur_;
-        cur_ += size + 2;
-        write_int(data_ + offset::CUR, cur_); // update `cur_`.
+        if (size > TUPLE_BLOCK_SIZE - 1) return INVALID_OFFSET;
         dirty_ = true;
-        return ret_offset;
+        // find an obsolete record.
+        uint32_t index = 0;
+        for (; index < BTNodeKeySize; index++)
+            if (data_[index * TUPLE_BLOCK_SIZE] == static_cast<char>(value_state::OBSOLETE))
+                break;
+        const uint32_t offset = index * TUPLE_BLOCK_SIZE;
+        data_[offset] = static_cast<char>(value_state::INUSED);
+        std::memcpy(data_ + offset + 1, content, size);
+        return offset;
+    }
+
+    void ValuePage::erase_block(uint32_t offset) {
+        data_[offset] = static_cast<char>(value_state::OBSOLETE);
+        dirty_ = true;
     }
 
     void ValuePage::update_data() {}
@@ -238,7 +272,8 @@ namespace DB::page
         value_page_->unref();
     }
 
-    bool LeafPage::insert_value(uint32_t index, const char* content, uint32_t size) {
+    bool LeafPage::insert_value(uint32_t index, const char* content, uint32_t size)
+    {
         const uint32_t offset = value_page_->write_content(content, size);
         if (offset != INVALID_OFFSET)
             values_[index] = offset;
@@ -246,6 +281,11 @@ namespace DB::page
             return false;
         dirty_ = true;
         return true;
+    }
+
+    void LeafPage::erase_value(const uint32_t index)
+    {
+        value_page_->erase_block(values_[index]);
     }
 
     void LeafPage::update_data()

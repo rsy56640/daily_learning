@@ -44,10 +44,10 @@ namespace DB::page
             STR_LEN = 20,
 
             // Leaf Page
-            VALUE_PAGE_ID = 24,
+            VALUE_PAGE_ID = 24;
 
-            // Value Page
-            CUR = 16;
+        // Value Page
+        //CUR = 16;
 
     }; // end class offset
 
@@ -126,6 +126,8 @@ namespace DB::page
     //////////////////////////////////////////////////////////////////////
 
     constexpr uint32_t BTdegree = 8u; // nEntry is [BTdegree - 1, 2*BTdegree -1], [7, 15]
+    constexpr uint32_t BTNodeKeySize = (BTdegree << 1) - 1;
+    constexpr uint32_t BTNodeBranchSize = BTdegree << 1;
 
     enum class key_t_t :uint32_t {
         INTEGER,
@@ -142,6 +144,13 @@ namespace DB::page
         std::string key_str; // <=57B
     };
 
+    // if key is (VAR)CHAR, the key is stored the offset to the real content.
+    // all contents are organized as blocks, each block is 58B.
+    // block structure: mark(1B), content(<=57B)
+    // the 1st block starts at 148u.
+    constexpr uint32_t KEY_STR_BLOCK = 58u;
+    constexpr uint32_t KEY_STR_START = 148u;
+    enum class key_str_state :char { OBSOLETE, INUSED };
 
     // for ROOT, INTERNAL, LEAF
     class BTreePage :public Page {
@@ -150,6 +159,9 @@ namespace DB::page
 
         // insert key at `index`.
         void insert_key(uint32_t index, const KeyEntry&);
+
+        // erase key at `index`
+        void erase_key(const uint32_t index);
 
     protected:
         BTreePage(page_t_t, page_id_t, BTreePage*, uint32_t nEntry, disk::DiskManager*,
@@ -160,7 +172,7 @@ namespace DB::page
         const uint32_t str_len_;
         uint32_t * keys_;    // nEntry
 
-        uint32_t last_offset_; // used for CHAR-key, insert ** from bottom to up **,
+     // uint32_t last_offset_; // used for CHAR-key, insert ** from bottom to up **,
                                // denotes the last front offset, initialized as `PAGE_SIZE`.
                                // It means data_[last_offset_-1] == '\0' for the next key-str.
                                // *** not record on disk, recovered when read this page. ***
@@ -188,35 +200,37 @@ namespace DB::page
 
     // the ValuePage stores the corresponding value to the key in LeafPage.
     // ValuePage stores whole `char*` and does not care about the specific content.
-    // the content must be suffixed with '\0',
-    // besieds we add 1B prefix to mark the content for GC. :) which might not be implemented.
-    // structure: mark(1B), content(<=57B), '\0'(1B)
-    // the value-offset points to the first mark.
-    enum class value_state :char { INUSED, OBSOLETE };
-
+    // record structure: mark(1B), content(<=67B)
+    // each record is 68B :), so it's trivial to handle.
+    // 15 * 68 < PAGE_SIZE
+    // the state mark is used when deleted, and when do inserttion, find the `OBSOLETE` entry.
+    enum class value_state :char { OBSOLETE, INUSED };
+    constexpr uint32_t TUPLE_BLOCK_SIZE = 68u;
 
     struct ValueEntry {
         value_state value_state_;
-        std::string_view content_;
+        char content_[TUPLE_BLOCK_SIZE - 1]; // 67B
     };
 
+    // NB: *** tuple size <= 67B ***
+    // NO '\0' at end !!!
     class ValuePage :public Page {
     public:
         ValuePage(page_id_t, BTreePage*, uint32_t nEntry, disk::DiskManager*, bool isInit = false);
 
-        // read ValueEntry at offset.
-        ValueEntry read_content(uint32_t offset);
+        // read ValueEntry at `index`.
+        ValueEntry read_content(uint32_t index);
 
-        // return offset at first mark.
-        // we suppose the strlen <= 57B, so that the write ops won't exceed.
+        // return offset.
+        // we suppose the strlen(content) <= 67, so that the write ops won't exceed.
         uint32_t write_content(const char* content, uint32_t size);
+
+        // set the block value_state to `OBSOLETE`.
+        void erase_block(uint32_t offset);
 
         // update the all metadata into memory, for the later `flush()`.
         // *** in fact, do nothing ***
         virtual void update_data();
-
-    private:
-        uint32_t cur_; // denotes the next pos to write.
 
     }; // end class ValuePage
 
@@ -232,6 +246,9 @@ namespace DB::page
 
         // return true on success, insert value at `index`.
         bool insert_value(uint32_t index, const char* content, uint32_t size);
+
+        // erase value-str in value page corrsponding to keys[index].
+        void erase_value(const uint32_t index);
 
         // update the all metadata into memory, for the later `flush()`.
         virtual void update_data();
