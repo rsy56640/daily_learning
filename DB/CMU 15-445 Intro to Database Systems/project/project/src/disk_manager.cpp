@@ -9,7 +9,7 @@ namespace DB::disk
         :
         cur_page_no_(page::NOT_A_PAGE),
         file_name_(file_name + ".xjbDB"),
-        log_name_(file_name + "_log.xjbDB"),
+        log_name_(file_name + ".xjbDB.log"),
         log_size_(0)
     {
         db_io_.open(file_name,

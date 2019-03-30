@@ -4,7 +4,7 @@
 #include "log_manager.h"
 #include "buffer_pool.h"
 
-namespace DB::table
+namespace DB::vm
 {
 
     // so many interfaces
@@ -37,6 +37,6 @@ namespace DB::table
 
 
 
-} // end namespace DB::table
+} // end namespace DB::vm
 
 #endif // !_TABLE_H
