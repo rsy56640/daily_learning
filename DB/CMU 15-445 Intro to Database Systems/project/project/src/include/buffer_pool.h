@@ -22,7 +22,7 @@ namespace DB::buffer
         BufferPoolManager& operator=(const BufferPoolManager&) = delete;
         BufferPoolManager& operator=(BufferPoolManager&&) = delete;
 
-        BufferPoolManager(disk::DiskManager* disk_manager, log::LogManager* log_manager);
+        BufferPoolManager(disk::DiskManager* disk_manager);
 
         // return the corresponding Page*.
         // the Page* is `ref()` before return.
@@ -35,18 +35,23 @@ namespace DB::buffer
         // in which case, the page is held at some execution, and later to be `unref()`.
         bool FlushPage(page_id_t page_id);
 
-        // the Page* is `ref()` before return.
+        // the Page* has been `ref()` before return.
         // user should *`unref()`* the page after use ! ! !
-        Page* NewPage(page_t_t);
+        Page* NewPage(PageInitInfo);
 
         // who fucking else should invoke this ???
         bool DeletePage(page_id_t page_id);
 
     private:
 
+        // parse the existing buffer into Page*.
+        Page * buffer_to_page(const char(&buffer)[page::PAGE_SIZE]);
+
+    private:
+
         Hash_LRU hash_lru_;
         disk::DiskManager* disk_manager_;
-        log::LogManager* log_manager_;
+        //log::LogManager* log_manager_;
 
     }; // end class BufferPoolManager
 

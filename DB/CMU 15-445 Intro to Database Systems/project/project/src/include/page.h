@@ -1,21 +1,22 @@
-// 
+// The design doc: https://github.com/rsy56640/xjbDB/tree/master/doc
 #ifndef _PAGE_H
 #define _PAGE_H
 #include <mutex>
 #include <shared_mutex>
 #include <atomic>
-#include <string_view>
+#include <string>
 #include "env.h"
 
 namespace DB::disk { class DiskManager; }
 namespace DB::tree { class BTree; }
+namespace DB::buffer { class BufferPoolManager; }
 namespace DB::page
 {
 
     constexpr uint32_t PAGE_SIZE = 1 << 10; // 1KB
 
     enum class page_t_t :uint32_t {
-        FREE,             //
+        //FREE,             //
         ROOT,             // also `InternalPage`
         INTERNAL,         //
         LEAF,             //
@@ -52,11 +53,7 @@ namespace DB::page
     }; // end class offset
 
 
-
-    // parse buffer[PAGE_SIZE] into a Page*
-    class Page;
     class BTreePage;
-    Page* buffer_to_page(const char* buffer, disk::DiskManager* disk_manager);
 
     // NB: whenever someone holds the Page*, the Page* must be `ref()` before!!!
     class Page
@@ -140,9 +137,10 @@ namespace DB::page
 
     struct KeyEntry {
         key_t_t key_t;
-        uint32_t key_int;
+        int32_t key_int;
         std::string key_str; // <=57B
     };
+
 
     // if key is (VAR)CHAR, the key is stored the offset to the real content.
     // all contents are organized as blocks, each block is 58B.
@@ -154,14 +152,21 @@ namespace DB::page
 
     // for ROOT, INTERNAL, LEAF
     class BTreePage :public Page {
-        friend class DB::tree::BTree;
+        friend class ::DB::tree::BTree;
     public:
 
         // insert key at `index`.
         void insert_key(uint32_t index, const KeyEntry&);
 
-        // erase key at `index`
+        // erase key at `index`.
+        // if the Page is Leaf, also erase value.
+        // *** the caller should later changes keys[index] and values[index] ***
         void erase_key(const uint32_t index);
+
+        // called when key_t is (VAR)CHAR
+        KeyEntry read_key(uint32_t index) const;
+
+        int32_t* keys_;    // nEntry // WTF, if in protected, BTree can not access this.
 
     protected:
         BTreePage(page_t_t, page_id_t, BTreePage*, uint32_t nEntry, disk::DiskManager*,
@@ -170,19 +175,27 @@ namespace DB::page
 
         const key_t_t key_t_;
         const uint32_t str_len_;
-        uint32_t * keys_;    // nEntry
 
-     // uint32_t last_offset_; // used for CHAR-key, insert ** from bottom to up **,
-                               // denotes the last front offset, initialized as `PAGE_SIZE`.
-                               // It means data_[last_offset_-1] == '\0' for the next key-str.
-                               // *** not record on disk, recovered when read this page. ***
+        // uint32_t last_offset_; // used for CHAR-key, insert ** from bottom to up **,
+                                  // denotes the last front offset, initialized as `PAGE_SIZE`.
+                                  // It means data_[last_offset_-1] == '\0' for the next key-str.
+                                  // *** not record on disk, recovered when read this page. ***
 
     }; // end class BTreePage
 
 
+    struct PageInitInfo {
+        page_t_t page_t;
+        BTreePage* parent;
+        key_t_t key_t;
+        uint32_t str_len;
+    };
+
+
+
     // for ROOT and INTERNAL
     class InternalPage :public BTreePage {
-        friend class DB::tree::BTree;
+        friend class ::DB::tree::BTree;
     public:
         InternalPage(page_t_t, page_id_t, BTreePage*, uint32_t nEntry,
             disk::DiskManager*, key_t_t, uint32_t str_len = 0, bool isInit = false);
@@ -205,11 +218,12 @@ namespace DB::page
     // 15 * 68 < PAGE_SIZE
     // the state mark is used when deleted, and when do inserttion, find the `OBSOLETE` entry.
     enum class value_state :char { OBSOLETE, INUSED };
+    constexpr uint32_t MAX_TUPLE_SIZE = 67u;
     constexpr uint32_t TUPLE_BLOCK_SIZE = 68u;
 
     struct ValueEntry {
-        value_state value_state_;
-        char content_[TUPLE_BLOCK_SIZE - 1]; // 67B
+        value_state value_state_ = value_state::OBSOLETE;
+        char content_[MAX_TUPLE_SIZE] = { 0 };        // 67B
     };
 
     // NB: *** tuple size <= 67B ***
@@ -218,12 +232,14 @@ namespace DB::page
     public:
         ValuePage(page_id_t, BTreePage*, uint32_t nEntry, disk::DiskManager*, bool isInit = false);
 
-        // read ValueEntry at `index`.
-        ValueEntry read_content(uint32_t index);
+        // read ValueEntry at `offset`.
+        void read_content(uint32_t offset, ValueEntry&) const;
 
-        // return offset.
-        // we suppose the strlen(content) <= 67, so that the write ops won't exceed.
-        uint32_t write_content(const char* content, uint32_t size);
+        // update content at `offset`
+        void update_content(uint32_t offset, const ValueEntry&);
+
+        // return offset of  the block.
+        uint32_t write_content(const ValueEntry&);
 
         // set the block value_state to `OBSOLETE`.
         void erase_block(uint32_t offset);
@@ -238,24 +254,32 @@ namespace DB::page
 
     // all value is stored in the corresponding ValuePage
     class LeafPage :public BTreePage {
-        friend class DB::tree::BTree;
+        friend class ::DB::tree::BTree;
+        friend class BTreePage;
     public:
-        LeafPage(page_id_t, BTreePage*, uint32_t nEntry, disk::DiskManager*, key_t_t,
-            uint32_t str_len = 0, bool isInit = false);
+        LeafPage(buffer::BufferPoolManager*, page_id_t, BTreePage*, uint32_t nEntry,
+            disk::DiskManager*, key_t_t, uint32_t str_len = 0, bool isInit = false);
         virtual ~LeafPage();
 
-        // return true on success, insert value at `index`.
-        bool insert_value(uint32_t index, const char* content, uint32_t size);
+        // read the value record into ValueEntry
+        void read_value(uint32_t index, ValueEntry&) const;
+
+        // insert value at `index`.
+        void insert_value(uint32_t index, const ValueEntry&);
 
         // erase value-str in value page corrsponding to keys[index].
-        void erase_value(const uint32_t index);
+        // called by `BTreePage::erase_key()`, do not called in BTree.
+        void erase_value(uint32_t index);
+
+        // update value at `index`.
+        void update_value(uint32_t index, const ValueEntry&);
 
         // update the all metadata into memory, for the later `flush()`.
         virtual void update_data();
 
     private:
         ValuePage * value_page_;
-        uint32_t* values_; // points to value-offset
+        uint32_t* values_; // points to offset of the value-blocks.
 
     }; // end class LeafPage
 

@@ -1,16 +1,12 @@
 #include "include/page.h"
 #include "include/disk_manager.h"
+#include "include/buffer_pool.h"
+#include "include/debug_log.h"
 #include <cstring>
 #include <vector>
-#include <algorithm>
 
 namespace DB::page
 {
-    // TODO: buffer_to_page
-    Page* buffer_to_page(const char* buffer, disk::DiskManager* disk_manager) {
-        //return new Page(page_t_t::FREE, NOT_A_PAGE, disk_manager);
-        return nullptr;
-    }
 
     // TODO: all ctor/dtor/update_data !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     Page::Page(page_t_t page_t, page_id_t page_id, BTreePage* parent, uint32_t nEntry,
@@ -131,7 +127,7 @@ namespace DB::page
         :Page(page_t, page_id, parent, nEntry, disk_manager, isInit),
         key_t_(key_t), str_len_(str_len)//, last_offset_(PAGE_SIZE)
     {
-        keys_ = new uint32_t[BTNodeKeySize];
+        keys_ = new int32_t[BTNodeKeySize];
         if (!isInit) {
             write_int(data_ + offset::KEY_T, static_cast<uint32_t>(key_t_));
             write_int(data_ + offset::STR_LEN, str_len_);
@@ -186,6 +182,19 @@ namespace DB::page
     }
 
 
+    KeyEntry BTreePage::read_key(uint32_t index) const
+    {
+        KeyEntry kEntry;
+        kEntry.key_t = key_t_;
+        const uint32_t offset = keys_[index];
+        if (data_[offset + KEY_STR_BLOCK - 1] != '\0')
+            kEntry.key_str = std::string(data_ + offset + 1, KEY_STR_BLOCK - 1);
+        else
+            kEntry.key_str = std::string(data_ + offset + 1);
+        return kEntry;
+    }
+
+
     //
     // InternalPage
     //
@@ -221,18 +230,22 @@ namespace DB::page
         }
     }
 
-    ValueEntry ValuePage::read_content(uint32_t index)
+    void ValuePage::read_content(uint32_t offset, ValueEntry& vEntry) const
     {
-        const uint32_t offset = index * TUPLE_BLOCK_SIZE;
-        ValueEntry vEntry;
         vEntry.value_state_ = static_cast<value_state>(data_[offset]);
         std::memcpy(vEntry.content_, data_ + offset + 1, TUPLE_BLOCK_SIZE - 1);
-        return vEntry;
     }
 
-    uint32_t ValuePage::write_content(const char* content, uint32_t size)
+    void ValuePage::update_content(uint32_t offset, const ValueEntry& vEntry)
     {
-        if (size > TUPLE_BLOCK_SIZE - 1) return INVALID_OFFSET;
+        if (vEntry.value_state_ != value_state::INUSED)
+            debug::DEBUG_LOG("`ValuePage::update_content()` input data invalid.");
+        data_[offset] = static_cast<char>(vEntry.value_state_);
+        std::memcpy(data_ + offset + 1, vEntry.content_, MAX_TUPLE_SIZE);
+    }
+
+    uint32_t ValuePage::write_content(const ValueEntry& vEntry)
+    {
         dirty_ = true;
         // find an obsolete record.
         uint32_t index = 0;
@@ -241,7 +254,7 @@ namespace DB::page
                 break;
         const uint32_t offset = index * TUPLE_BLOCK_SIZE;
         data_[offset] = static_cast<char>(value_state::INUSED);
-        std::memcpy(data_ + offset + 1, content, size);
+        std::memcpy(data_ + offset + 1, vEntry.content_, MAX_TUPLE_SIZE);
         return offset;
     }
 
@@ -257,12 +270,18 @@ namespace DB::page
     //
     // LeafPage
     //
-    LeafPage::LeafPage(page_id_t page_id, BTreePage* parent, uint32_t nEntry,
+    LeafPage::LeafPage(buffer::BufferPoolManager* buffer_pool, page_id_t page_id, BTreePage* parent, uint32_t nEntry,
         disk::DiskManager* disk_manager, key_t_t key_t, uint32_t str_len, bool isInit)
-        :BTreePage(page_t_t::LEAF, page_id, parent, nEntry, disk_manager, key_t, str_len, isInit)
+        :BTreePage(page_t_t::LEAF, page_id, parent, nEntry,
+            disk_manager, key_t, str_len, isInit)
     {
-        value_page_ = new ValuePage(disk_manager_->AllocatePage(), this, 0, disk_manager_);
-        value_page_->ref();
+        PageInitInfo info;
+        info.page_t = page_t_t::VALUE;
+        info.parent = this;
+        info.key_t = key_t;
+        info.str_len = str_len;
+        value_page_ = static_cast<ValuePage*>(buffer_pool->NewPage(info));
+        // value_page_ has been `ref()`.
         if (!isInit) {
             write_int(data_ + offset::VALUE_PAGE_ID, value_page_->get_page_id());
         }
@@ -272,21 +291,27 @@ namespace DB::page
         value_page_->unref();
     }
 
-    bool LeafPage::insert_value(uint32_t index, const char* content, uint32_t size)
+    void LeafPage::read_value(uint32_t index, ValueEntry& vEntry) const
     {
-        const uint32_t offset = value_page_->write_content(content, size);
-        if (offset != INVALID_OFFSET)
-            values_[index] = offset;
-        else
-            return false;
-        dirty_ = true;
-        return true;
+        value_page_->read_content(values_[index], vEntry);
+        if (vEntry.value_state_ != value_state::INUSED)
+            debug::DEBUG_LOG("`LeafPage::read_value()` read corrupted value.");
     }
 
-    void LeafPage::erase_value(const uint32_t index)
+    void LeafPage::insert_value(uint32_t index, const ValueEntry& vEntry)
     {
+        values_[index] = value_page_->write_content(vEntry);
+        dirty_ = true;
+    }
+
+    void LeafPage::erase_value(uint32_t index) {
         value_page_->erase_block(values_[index]);
     }
+
+    void LeafPage::update_value(uint32_t index, const ValueEntry& vEntry) {
+        value_page_->update_content(values_[index], vEntry);
+    }
+
 
     void LeafPage::update_data()
     {
