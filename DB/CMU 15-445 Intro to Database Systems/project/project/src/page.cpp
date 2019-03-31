@@ -9,34 +9,33 @@ namespace DB::page
 {
 
     // TODO: all ctor/dtor/update_data !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    Page::Page(page_t_t page_t, page_id_t page_id, BTreePage* parent, uint32_t nEntry,
+    Page::Page(page_t_t page_t, page_id_t page_id, page_id_t parent_id, uint32_t nEntry,
         disk::DiskManager* disk_manager, bool isInit)
         :
         disk_manager_(disk_manager),
         page_t_(page_t),
         page_id_(page_id),
-        parent_(parent),
+        parent_id_(parent_id),
         nEntry_(nEntry),
         ref_count_(0),
         dirty_(false),
         discarded_(false)
     {
-        parent_->ref(); // !!!
         disk_manager_->ReadPage(page_id_, data_);
         if (!isInit) {
             write_int(data_ + offset::PAGE_T, static_cast<uint32_t>(page_t_));
             write_int(data_ + offset::PAGE_ID, page_id_);
-            if (parent_ == nullptr)
+            if (parent_id_ == NOT_A_PAGE)
                 write_int(data_ + offset::PARENT_PAGE_ID, NOT_A_PAGE);
             else
-                write_int(data_ + offset::PARENT_PAGE_ID, parent_->get_page_id());
+                write_int(data_ + offset::PARENT_PAGE_ID, parent_id_);
             write_int(data_ + offset::NENTRY, nEntry_);
             dirty_ = true;
         }
     }
 
     Page::~Page() {
-        parent_->unref();
+
     }
 
     void Page::ref() {
@@ -85,6 +84,12 @@ namespace DB::page
     bool Page::try_page_write_lock() {
         return rw_page_mutex_.try_lock();
     }
+    void Page::page_read_lock() {
+        while (!(try_page_read_lock()));
+    }
+    void Page::page_write_lock() {
+        while (!(try_page_write_lock()));
+    }
     void Page::page_read_unlock() {
         rw_page_mutex_.unlock_shared();
     }
@@ -115,6 +120,20 @@ namespace DB::page
         data[3] = value >> 24;
     }
 
+    uint32_t read_short(const char* data) {
+        uint32_t
+            u0 = static_cast<unsigned char>(data[0]),
+            u1 = static_cast<unsigned char>(data[1]);
+        uint32_t uval = u0 | (u1 << 8);
+        return uval;
+    }
+
+    void write_short(char* data, uint32_t value) {
+        data[0] = value;
+        data[1] = value >> 8;
+    }
+
+
     //////////////////////////////////////////////////////////////////////
     //////////////////////       B+ Tree Page       //////////////////////
     //////////////////////////////////////////////////////////////////////
@@ -122,15 +141,15 @@ namespace DB::page
     //
     // BTree Page
     //
-    BTreePage::BTreePage(page_t_t page_t, page_id_t page_id, BTreePage* parent, uint32_t nEntry,
+    BTreePage::BTreePage(page_t_t page_t, page_id_t page_id, page_id_t parent_id, uint32_t nEntry,
         disk::DiskManager* disk_manager, key_t_t key_t, uint32_t str_len, bool isInit)
-        :Page(page_t, page_id, parent, nEntry, disk_manager, isInit),
+        :Page(page_t, page_id, parent_id, nEntry, disk_manager, isInit),
         key_t_(key_t), str_len_(str_len)//, last_offset_(PAGE_SIZE)
     {
         keys_ = new int32_t[BTNodeKeySize];
         if (!isInit) {
-            write_int(data_ + offset::KEY_T, static_cast<uint32_t>(key_t_));
-            write_int(data_ + offset::STR_LEN, str_len_);
+            write_short(data_ + offset::KEY_T, static_cast<uint32_t>(key_t_));
+            write_short(data_ + offset::STR_LEN, str_len_);
         }
     }
 
@@ -198,17 +217,15 @@ namespace DB::page
     //
     // InternalPage
     //
-    InternalPage::InternalPage(page_t_t page_t, page_id_t page_id, BTreePage* parent, uint32_t nEntry,
+    InternalPage::InternalPage(page_t_t page_t, page_id_t page_id, page_id_t parent_id, uint32_t nEntry,
         disk::DiskManager* disk_manager, key_t_t key_t, uint32_t str_len, bool isInit)
-        :BTreePage(page_t, page_id, parent, nEntry, disk_manager, key_t, str_len, isInit)
+        :BTreePage(page_t, page_id, parent_id, nEntry, disk_manager, key_t, str_len, isInit)
     {
-        branch_ = new Page*[BTNodeBranchSize];
+        branch_ = new page_id_t[BTNodeBranchSize];
     }
 
     InternalPage::~InternalPage()
     {
-        for (uint32_t i = 0; i < nEntry_; i++)
-            branch_[i]->unref();
         delete[] branch_;
     }
 
@@ -221,9 +238,9 @@ namespace DB::page
     //
     // ValuePage
     //
-    ValuePage::ValuePage(page_id_t page_id, BTreePage* parent, uint32_t nEntry,
+    ValuePage::ValuePage(page_id_t page_id, page_id_t parent_id, uint32_t nEntry,
         disk::DiskManager* disk_manager, bool isInit)
-        :Page(page_t_t::VALUE, page_id, parent, nEntry, disk_manager, isInit)//, cur_(offset::CUR)
+        :Page(page_t_t::VALUE, page_id, parent_id, nEntry, disk_manager, isInit)//, cur_(offset::CUR)
     {
         if (!isInit) {
             // write_int(data_ + offset::CUR, offset::CUR);
@@ -239,7 +256,7 @@ namespace DB::page
     void ValuePage::update_content(uint32_t offset, const ValueEntry& vEntry)
     {
         if (vEntry.value_state_ != value_state::INUSED)
-            debug::DEBUG_LOG("`ValuePage::update_content()` input data invalid.");
+            debug::ERROR_LOG("`ValuePage::update_content()` input data invalid.");
         data_[offset] = static_cast<char>(vEntry.value_state_);
         std::memcpy(data_ + offset + 1, vEntry.content_, MAX_TUPLE_SIZE);
     }
@@ -270,32 +287,38 @@ namespace DB::page
     //
     // LeafPage
     //
-    LeafPage::LeafPage(buffer::BufferPoolManager* buffer_pool, page_id_t page_id, BTreePage* parent, uint32_t nEntry,
-        disk::DiskManager* disk_manager, key_t_t key_t, uint32_t str_len, bool isInit)
-        :BTreePage(page_t_t::LEAF, page_id, parent, nEntry,
-            disk_manager, key_t, str_len, isInit)
+    LeafPage::LeafPage(buffer::BufferPoolManager* buffer_pool, page_id_t page_id, page_id_t parent_id, uint32_t nEntry,
+        disk::DiskManager* disk_manager, key_t_t key_t, uint32_t str_len, page_id_t value_page_id, bool isInit)
+        :BTreePage(page_t_t::LEAF, page_id, parent_id, nEntry,
+            disk_manager, key_t, str_len, isInit), value_page_id_(value_page_id)
     {
         PageInitInfo info;
         info.page_t = page_t_t::VALUE;
-        info.parent = this;
-        info.key_t = key_t;
-        info.str_len = str_len;
-        value_page_ = static_cast<ValuePage*>(buffer_pool->NewPage(info));
-        // value_page_ has been `ref()`.
-        if (!isInit) {
-            write_int(data_ + offset::VALUE_PAGE_ID, value_page_->get_page_id());
+        info.parent_id = this->get_page_id();
+        if (isInit) // new
+        {
+            value_page_ = static_cast<ValuePage*>(buffer_pool->NewPage(info));
+            buffer_pool->DeletePage(value_page_->get_page_id());
+            // now value_page has excatly *** 1 ref count ***.
+            write_int(data_ + offset::VALUE_PAGE_ID, value_page_id_);
+        }
+        else // exist
+        {
+            value_page_ = static_cast<ValuePage*>(buffer_pool->FetchPage(value_page_id_));
+            buffer_pool->DeletePage(value_page_->get_page_id());
+            // now value_page has excatly *** 1 ref count ***.
         }
     }
 
     LeafPage::~LeafPage() {
-        value_page_->unref();
+        value_page_->unref(); // ref 1->0
     }
 
     void LeafPage::read_value(uint32_t index, ValueEntry& vEntry) const
     {
         value_page_->read_content(values_[index], vEntry);
         if (vEntry.value_state_ != value_state::INUSED)
-            debug::DEBUG_LOG("`LeafPage::read_value()` read corrupted value.");
+            debug::ERROR_LOG("`LeafPage::read_value()` read corrupted value.");
     }
 
     void LeafPage::insert_value(uint32_t index, const ValueEntry& vEntry)
@@ -312,6 +335,10 @@ namespace DB::page
         value_page_->update_content(values_[index], vEntry);
     }
 
+    void LeafPage::set_left_leaf(page_id_t previous_page_id) { previous_page_id_ = previous_page_id; }
+    void LeafPage::set_right_leaf(page_id_t next_page_id) { next_page_id_ = next_page_id; }
+    page_id_t LeafPage::get_left_leaf() const { return previous_page_id_; }
+    page_id_t LeafPage::get_right_leaf() const { return next_page_id_; }
 
     void LeafPage::update_data()
     {

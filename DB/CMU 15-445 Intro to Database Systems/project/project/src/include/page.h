@@ -42,13 +42,13 @@ namespace DB::page
 
             // BTree Page
             KEY_T = 16,
-            STR_LEN = 20,
+            STR_LEN = 18,
 
             // Leaf Page
-            VALUE_PAGE_ID = 24;
+            VALUE_PAGE_ID = 20,
+            PREVIOUS_PAGE_ID = 24,
+            NEXT_PAGE_ID = 28;
 
-        // Value Page
-        //CUR = 16;
 
     }; // end class offset
 
@@ -58,9 +58,10 @@ namespace DB::page
     // NB: whenever someone holds the Page*, the Page* must be `ref()` before!!!
     class Page
     {
+        friend class ::DB::tree::BTree;
     public:
 
-        Page(page_t_t, page_id_t, BTreePage*, uint32_t nEntry, disk::DiskManager*, bool isInit);
+        Page(page_t_t, page_id_t, page_id_t, uint32_t nEntry, disk::DiskManager*, bool isInit);
 
         virtual ~Page();
 
@@ -84,6 +85,8 @@ namespace DB::page
         // return true if the lock is acquired.
         bool try_page_read_lock();
         bool try_page_write_lock();
+        void page_read_lock();
+        void page_write_lock();
         void page_read_unlock();
         void page_write_unlock();
 
@@ -99,7 +102,7 @@ namespace DB::page
         disk::DiskManager * disk_manager_;
         const page_t_t page_t_;
         const page_id_t page_id_;
-        BTreePage* parent_;
+        page_id_t parent_id_;
         uint32_t nEntry_;
         char data_[PAGE_SIZE];
         bool dirty_;
@@ -118,13 +121,17 @@ namespace DB::page
 
     void write_int(char*, uint32_t value);
 
+    uint32_t read_short(const char*);
+
+    void write_short(char*, uint32_t value);
+
     //////////////////////////////////////////////////////////////////////
     //////////////////////       B+ Tree Page       //////////////////////
     //////////////////////////////////////////////////////////////////////
 
     constexpr uint32_t BTdegree = 8u; // nEntry is [BTdegree - 1, 2*BTdegree -1], [7, 15]
     constexpr uint32_t BTNodeKeySize = (BTdegree << 1) - 1;
-    constexpr uint32_t BTNodeBranchSize = BTdegree << 1;
+    constexpr uint32_t BTNodeBranchSize = BTNodeKeySize;
 
     enum class key_t_t :uint32_t {
         INTEGER,
@@ -145,9 +152,9 @@ namespace DB::page
     // if key is (VAR)CHAR, the key is stored the offset to the real content.
     // all contents are organized as blocks, each block is 58B.
     // block structure: mark(1B), content(<=57B)
-    // the 1st block starts at 148u.
+    // the 1st block starts at 152u.
     constexpr uint32_t KEY_STR_BLOCK = 58u;
-    constexpr uint32_t KEY_STR_START = 148u;
+    constexpr uint32_t KEY_STR_START = 152u;
     enum class key_str_state :char { OBSOLETE, INUSED };
 
     // for ROOT, INTERNAL, LEAF
@@ -169,7 +176,7 @@ namespace DB::page
         int32_t* keys_;    // nEntry // WTF, if in protected, BTree can not access this.
 
     protected:
-        BTreePage(page_t_t, page_id_t, BTreePage*, uint32_t nEntry, disk::DiskManager*,
+        BTreePage(page_t_t, page_id_t, page_id_t, uint32_t nEntry, disk::DiskManager*,
             key_t_t, uint32_t str_len, bool isInit);
         ~BTreePage();
 
@@ -186,9 +193,12 @@ namespace DB::page
 
     struct PageInitInfo {
         page_t_t page_t;
-        BTreePage* parent;
-        key_t_t key_t;
-        uint32_t str_len;
+        page_id_t parent_id;
+        key_t_t key_t;              // used for BTreePage
+        uint32_t str_len;           // used for BTreePage
+        page_id_t value_page_id;    // used for LeafPage
+        page_id_t previous_page_id; // used for LeafPage
+        page_id_t next_page_id;     // used for LeafPage
     };
 
 
@@ -197,7 +207,7 @@ namespace DB::page
     class InternalPage :public BTreePage {
         friend class ::DB::tree::BTree;
     public:
-        InternalPage(page_t_t, page_id_t, BTreePage*, uint32_t nEntry,
+        InternalPage(page_t_t, page_id_t, page_id_t, uint32_t nEntry,
             disk::DiskManager*, key_t_t, uint32_t str_len = 0, bool isInit = false);
         virtual ~InternalPage();
 
@@ -205,7 +215,7 @@ namespace DB::page
         virtual void update_data();
 
     private:
-        Page * * branch_;     // nEntry + 1
+        page_id_t * branch_;     // nEntry + 1
 
     }; // end class InternalPage
 
@@ -230,7 +240,7 @@ namespace DB::page
     // NO '\0' at end !!!
     class ValuePage :public Page {
     public:
-        ValuePage(page_id_t, BTreePage*, uint32_t nEntry, disk::DiskManager*, bool isInit = false);
+        ValuePage(page_id_t, page_id_t, uint32_t nEntry, disk::DiskManager*, bool isInit = false);
 
         // read ValueEntry at `offset`.
         void read_content(uint32_t offset, ValueEntry&) const;
@@ -257,8 +267,8 @@ namespace DB::page
         friend class ::DB::tree::BTree;
         friend class BTreePage;
     public:
-        LeafPage(buffer::BufferPoolManager*, page_id_t, BTreePage*, uint32_t nEntry,
-            disk::DiskManager*, key_t_t, uint32_t str_len = 0, bool isInit = false);
+        LeafPage(buffer::BufferPoolManager*, page_id_t, page_id_t, uint32_t nEntry,
+            disk::DiskManager*, key_t_t, uint32_t str_len, page_id_t value_page_id, bool isInit = false);
         virtual ~LeafPage();
 
         // read the value record into ValueEntry
@@ -274,12 +284,19 @@ namespace DB::page
         // update value at `index`.
         void update_value(uint32_t index, const ValueEntry&);
 
+        void set_left_leaf(page_id_t);
+        void set_right_leaf(page_id_t);
+        page_id_t get_left_leaf() const;
+        page_id_t get_right_leaf() const;
+
         // update the all metadata into memory, for the later `flush()`.
         virtual void update_data();
 
     private:
         ValuePage * value_page_;
+        page_id_t value_page_id_;
         uint32_t* values_; // points to offset of the value-blocks.
+        page_id_t previous_page_id_, next_page_id_;
 
     }; // end class LeafPage
 

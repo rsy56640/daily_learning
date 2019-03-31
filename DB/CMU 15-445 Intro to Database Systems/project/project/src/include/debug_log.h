@@ -4,6 +4,7 @@
 namespace DB::debug
 {
 
+    void ERROR_LOG(const char*);
     void DEBUG_LOG(const char*);
 
 

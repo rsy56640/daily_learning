@@ -40,6 +40,7 @@ namespace DB::buffer
         Page* NewPage(PageInitInfo);
 
         // who fucking else should invoke this ???
+        // remove page_id from hash-lru
         bool DeletePage(page_id_t page_id);
 
     private:
