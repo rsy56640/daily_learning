@@ -15,14 +15,8 @@ namespace DB::vm
 
 
 
-    class StorageEngine
+    struct StorageEngine
     {
-        friend class ::DB::tree::BTree;
-    public:
-
-
-
-    private:
 
         //disk::DiskManager* disk_manager_;
         buffer::BufferPoolManager* buffer_pool_manager_;

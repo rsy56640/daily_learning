@@ -4,6 +4,7 @@
 #include "env.h"
 #include <fstream>
 #include <string>
+#include <atomic>
 
 namespace DB::disk
 {
@@ -43,7 +44,7 @@ namespace DB::disk
         DiskManager& operator=(DiskManager&&) = delete;
 
     private:
-        page_id_t cur_page_no_;
+        std::atomic<page_id_t> cur_page_no_;
 
         // stream to write db file
         const std::string file_name_;

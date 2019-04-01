@@ -16,13 +16,13 @@ namespace DB::page
     constexpr uint32_t PAGE_SIZE = 1 << 10; // 1KB
 
     enum class page_t_t :uint32_t {
-        //FREE,             //
-        ROOT,             // also `InternalPage`
-        INTERNAL,         //
-        LEAF,             //
-        VALUE,            //
-        //pointer_map,      //
-        //lock_byte,        //
+        ROOT_INTERNAL,
+        ROOT_LEAF,
+        INTERNAL,
+        LEAF,
+        VALUE,
+        //pointer_map,
+        //lock_byte,
     };
 
     // use 32 bit integer to represent the page_id.
@@ -61,7 +61,7 @@ namespace DB::page
         friend class ::DB::tree::BTree;
     public:
 
-        Page(page_t_t, page_id_t, page_id_t, uint32_t nEntry, disk::DiskManager*, bool isInit);
+        Page(page_t_t, page_id_t, page_id_t parent_id, uint32_t nEntry, disk::DiskManager*, bool isInit);
 
         virtual ~Page();
 
@@ -100,7 +100,7 @@ namespace DB::page
 
     protected:
         disk::DiskManager * disk_manager_;
-        const page_t_t page_t_;
+        page_t_t page_t_; // fundamentally const, but ROOT may violate the rule.
         const page_id_t page_id_;
         page_id_t parent_id_;
         uint32_t nEntry_;
@@ -131,7 +131,7 @@ namespace DB::page
 
     constexpr uint32_t BTdegree = 8u; // nEntry is [BTdegree - 1, 2*BTdegree -1], [7, 15]
     constexpr uint32_t BTNodeKeySize = (BTdegree << 1) - 1;
-    constexpr uint32_t BTNodeBranchSize = BTNodeKeySize;
+    constexpr uint32_t BTNodeBranchSize = BTdegree << 1;
 
     enum class key_t_t :uint32_t {
         INTEGER,
@@ -166,9 +166,8 @@ namespace DB::page
         void insert_key(uint32_t index, const KeyEntry&);
 
         // erase key at `index`.
-        // if the Page is Leaf, also erase value.
         // *** the caller should later changes keys[index] and values[index] ***
-        void erase_key(const uint32_t index);
+        void erase_key(uint32_t index);
 
         // called when key_t is (VAR)CHAR
         KeyEntry read_key(uint32_t index) const;
@@ -176,7 +175,7 @@ namespace DB::page
         int32_t* keys_;    // nEntry // WTF, if in protected, BTree can not access this.
 
     protected:
-        BTreePage(page_t_t, page_id_t, page_id_t, uint32_t nEntry, disk::DiskManager*,
+        BTreePage(page_t_t, page_id_t, page_id_t parent_id, uint32_t nEntry, disk::DiskManager*,
             key_t_t, uint32_t str_len, bool isInit);
         ~BTreePage();
 
@@ -196,19 +195,61 @@ namespace DB::page
         page_id_t parent_id;
         key_t_t key_t;              // used for BTreePage
         uint32_t str_len;           // used for BTreePage
-        page_id_t value_page_id;    // used for LeafPage
-        page_id_t previous_page_id; // used for LeafPage
-        page_id_t next_page_id;     // used for LeafPage
+        page_id_t value_page_id;    // used for LeafPage, ignore if `isInit == true`
+        page_id_t previous_page_id; // used for LeafPage, ignore if `isInit == true`
+        page_id_t next_page_id;     // used for LeafPage, ignore if `isInit == true`
     };
 
 
+    class RootPage :public BTreePage {
+        friend class ::DB::tree::BTree;
+        friend class BTreePage;
+    public:
+        RootPage(buffer::BufferPoolManager*, page_t_t, page_id_t parent_id, page_id_t,
+            uint32_t nEntry, disk::DiskManager*, key_t_t, uint32_t str_len, page_id_t value_page_id, bool isInit);
+        virtual ~RootPage();
 
-    // for ROOT and INTERNAL
+        // read the value record into ValueEntry
+        void read_value(uint32_t index, ValueEntry&) const;
+
+        // insert value at `index`.
+        void insert_value(uint32_t index, const ValueEntry&);
+
+        // erase value-str in value page corrsponding to keys[index].
+        void erase_value(uint32_t index);
+
+        // update value at `index`.
+        void update_value(uint32_t index, const ValueEntry&);
+
+        void set_left_leaf(page_id_t);
+        void set_right_leaf(page_id_t);
+        page_id_t get_left_leaf() const;
+        page_id_t get_right_leaf() const;
+
+        // update the all metadata into memory, for the later `flush()`.
+        virtual void update_data();
+
+    private:
+
+        // for ROOT_INTERNAL
+        page_id_t * branch_;     // nEntry + 1
+
+        // for ROOT_LEAF
+        ValuePage * value_page_;
+        page_id_t value_page_id_;
+        uint32_t* values_; // points to offset of the value-blocks.
+        page_id_t previous_page_id_, next_page_id_;
+
+
+    }; // end class InternalPage
+
+
+    // for INTERNAL
     class InternalPage :public BTreePage {
         friend class ::DB::tree::BTree;
     public:
-        InternalPage(page_t_t, page_id_t, page_id_t, uint32_t nEntry,
-            disk::DiskManager*, key_t_t, uint32_t str_len = 0, bool isInit = false);
+        InternalPage(page_t_t, page_id_t, page_id_t parent_id, uint32_t nEntry,
+            disk::DiskManager*, key_t_t, uint32_t str_len, bool isInit);
         virtual ~InternalPage();
 
         // update the all metadata into memory, for the later `flush()`.
@@ -240,7 +281,7 @@ namespace DB::page
     // NO '\0' at end !!!
     class ValuePage :public Page {
     public:
-        ValuePage(page_id_t, page_id_t, uint32_t nEntry, disk::DiskManager*, bool isInit = false);
+        ValuePage(page_id_t, page_id_t, uint32_t nEntry, disk::DiskManager*, bool isInit);
 
         // read ValueEntry at `offset`.
         void read_content(uint32_t offset, ValueEntry&) const;
@@ -267,8 +308,8 @@ namespace DB::page
         friend class ::DB::tree::BTree;
         friend class BTreePage;
     public:
-        LeafPage(buffer::BufferPoolManager*, page_id_t, page_id_t, uint32_t nEntry,
-            disk::DiskManager*, key_t_t, uint32_t str_len, page_id_t value_page_id, bool isInit = false);
+        LeafPage(buffer::BufferPoolManager*, page_id_t, page_id_t parent_id, uint32_t nEntry,
+            disk::DiskManager*, key_t_t, uint32_t str_len, page_id_t value_page_id, bool isInit);
         virtual ~LeafPage();
 
         // read the value record into ValueEntry
@@ -278,7 +319,6 @@ namespace DB::page
         void insert_value(uint32_t index, const ValueEntry&);
 
         // erase value-str in value page corrsponding to keys[index].
-        // called by `BTreePage::erase_key()`, do not called in BTree.
         void erase_value(uint32_t index);
 
         // update value at `index`.
@@ -295,8 +335,8 @@ namespace DB::page
     private:
         ValuePage * value_page_;
         page_id_t value_page_id_;
-        uint32_t* values_; // points to offset of the value-blocks.
         page_id_t previous_page_id_, next_page_id_;
+        uint32_t* values_; // points to offset of the value-blocks.
 
     }; // end class LeafPage
 

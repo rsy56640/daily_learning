@@ -39,6 +39,9 @@ namespace DB::disk
             log_io_.open(log_name_,
                 std::ios::binary | std::ios::in | std::ios::app | std::ios::out);
         }
+
+        // TODO: recover cur_page_no
+
     }
 
 

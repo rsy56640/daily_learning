@@ -61,6 +61,8 @@ namespace DB::buffer
 
         Hash_LRU();
 
+        ~Hash_LRU();
+
         // return true on success, false if the key does exist.
         bool insert(page_id_t, page::Page*);
 

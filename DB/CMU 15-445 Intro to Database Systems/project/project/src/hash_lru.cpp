@@ -66,6 +66,16 @@ namespace DB::buffer
         lru_head_.prev_lru_ = &lru_head_;
     }
 
+    Hash_LRU::~Hash_LRU() {
+        PageListHandle* it = lru_head_.next_lru_;
+        while (it != &lru_head_) {
+            PageListHandle* temp = it;
+            it = it->next_lru_;
+            temp->unref();
+        }
+    }
+
+
     // `ref_count` in PageList is tracked automatically, we only manage `ref_count` in LRU.
     // We manually manipulate `ref_count`, though, in some multi-thread conditions.
 

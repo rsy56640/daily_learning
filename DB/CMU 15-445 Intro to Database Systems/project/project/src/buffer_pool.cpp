@@ -47,9 +47,17 @@ namespace DB::buffer
         Page* page_ptr;
         switch (info.page_t)
         {
-        case page_t_t::ROOT:
+        case page_t_t::ROOT_INTERNAL:
+        case page_t_t::ROOT_LEAF:
+            page_ptr = new RootPage(this, info.page_t, page_id, info.parent_id, 0,
+                disk_manager_, info.key_t, info.str_len, info.value_page_id, true);
+            if (info.page_t == page_t_t::ROOT_LEAF) {
+                static_cast<RootPage*>(page_ptr)->set_left_leaf(NOT_A_PAGE);
+                static_cast<RootPage*>(page_ptr)->set_right_leaf(NOT_A_PAGE);
+            }
+            break;
         case page_t_t::INTERNAL:
-            page_ptr = new InternalPage(info.page_t, page_id, info.parent_id, 0,
+            page_ptr = new InternalPage(page_t_t::INTERNAL, page_id, info.parent_id, 0,
                 disk_manager_, info.key_t, info.str_len, true);
             break;
         case page_t_t::LEAF:

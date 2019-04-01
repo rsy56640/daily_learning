@@ -173,6 +173,10 @@ namespace DB::page
                 if (data_[KEY_STR_START + keyStrIndex * KEY_STR_BLOCK]
                     == static_cast<char>(key_str_state::OBSOLETE))
                     break;
+
+            if (keyStrIndex == BTNodeKeySize)
+                debug::ERROR_LOG("`BTreePage::insert_key()`, might forget erase key somewhere");
+
             const uint32_t offset = KEY_STR_START + keyStrIndex * KEY_STR_BLOCK;
             keys_[index] = offset; // update key-index
             data_[offset] = static_cast<char>(key_str_state::INUSED);
@@ -184,20 +188,15 @@ namespace DB::page
     }
 
 
-    void BTreePage::erase_key(const uint32_t index)
+    void BTreePage::erase_key(uint32_t index)
     {
-        dirty_ = true;
-
-        // remove the value-str on leaf-node.
-        if (page_t_ == page_t_t::LEAF)
-            static_cast<LeafPage*>(this)->erase_value(index);
-
         // if key is (VAR)CHAR attached at the end.
         if (key_t_ != key_t_t::INTEGER)
         {
             const uint32_t offset = keys_[index];
             data_[offset] = static_cast<char>(key_str_state::OBSOLETE);
         }
+        dirty_ = true;
     }
 
 
@@ -298,14 +297,15 @@ namespace DB::page
         if (isInit) // new
         {
             value_page_ = static_cast<ValuePage*>(buffer_pool->NewPage(info));
-            buffer_pool->DeletePage(value_page_->get_page_id());
+            value_page_id_ = value_page_->get_page_id();
+            buffer_pool->DeletePage(value_page_id_);
             // now value_page has excatly *** 1 ref count ***.
             write_int(data_ + offset::VALUE_PAGE_ID, value_page_id_);
         }
         else // exist
         {
             value_page_ = static_cast<ValuePage*>(buffer_pool->FetchPage(value_page_id_));
-            buffer_pool->DeletePage(value_page_->get_page_id());
+            buffer_pool->DeletePage(value_page_id_);
             // now value_page has excatly *** 1 ref count ***.
         }
     }
