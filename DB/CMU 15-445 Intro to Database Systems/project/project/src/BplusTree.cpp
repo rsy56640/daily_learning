@@ -48,32 +48,78 @@ namespace DB::tree
 
     // return: `INSERT_NOTHING`, the key exists, do nothing.
     //         `INSERT_KV`,      no such key exists, and insert k-v.
-    uint32_t BTree::insert(const KVEntry& kEntry)
+    uint32_t BTree::insert(const KVEntry& kvEntry)
     {
         std::shared_lock<std::shared_mutex> lg(range_query_lock_);
 
         root_->page_write_lock();
+
         // try to split full root
         if (root_->nEntry_ == MAX_KEY_SIZE)
             split_root();
+
+        // find index such that kEntry <= node.k[index]
+        uint32_t index = 0;
+        for (; index < root_->nEntry_; index++)
+            if (key_compare(kvEntry.kEntry, root_, index) <= 0)
+                break;
+
+        //
         // `ROOT_LEAF` insertion
+        //
         if (root_->get_page_t() == page_t_t::ROOT_LEAF)
         {
-            // TODO: ROOT_LEAF insertion
+            uint32_t insert_return;
+            // if equal, return `INSERT_NOTHING`. (note to validate index)
+            if (index != root_->nEntry_ && // kEntry > all root.keys, insert!!!
+                key_compare(kvEntry.kEntry, root_, index) == 0)
+                insert_return = INSERT_NOTHING;
 
-
+            // move the index to right, then insert(++BT.size), release write-lock.
+            else {
+                size_++; // increase B+Tree size
+                root_ptr leaf = static_cast<root_ptr>(root_);
+                leaf->nEntry_++;
+                // also valid when B+Tree is empty :)
+                for (uint32_t i = leaf->nEntry_ - 1; i > index; i--) {
+                    leaf->keys_[i] = leaf->keys_[i - 1];
+                    leaf->values_[i] = leaf->values_[i - 1];
+                }
+                leaf->insert_key(index, kvEntry.kEntry);
+                leaf->insert_value(index, kvEntry.vEntry);
+                insert_return = INSERT_KV;
+                leaf->set_dirty();
+            }
 
             root_->page_write_unlock();
-            return;
-        }
+            return insert_return;
+
+        } // end `ROOT_LEAF` insertion.
+
+
+        //
+        // root is INTERNAL
+        //
+        // hold write-lock of root.br[index]
+        base_ptr node = fetch_node(static_cast<root_ptr>(root_)->branch_[index]);
+        node->page_write_lock();
+
+        // if need to split root.br[index], then split.
+        if (node->nEntry_ == MAX_KEY_SIZE)
+            split(static_cast<root_ptr>(root_), index, node);
+
+        // release write-lock of root, then hold the read-lock of root.
         root_->page_write_unlock();
-
         root_->page_read_lock();
-        // TODO: BTree::insert()
 
-
+        // recursively go down then release read-lock.
+        uint32_t insert_return = INSERT_NONFULL(node, kvEntry);
         root_->page_read_unlock();
-    }
+
+        node->unref();
+        return insert_return;
+
+    } // end function `BTree::insert(kv)`
 
 
     /////////////////////////////// private implementation ///////////////////////////////
@@ -431,28 +477,83 @@ namespace DB::tree
     }
 
 
-    // node is non-full, non-root, insert if LEAF, else go down recursively.
+    // REQUIREMENT: caller should hold the write-lock of node, callee unlock.
+    //              node is non-full, non-root, insert if LEAF, else go down recursively.
     // return: `INSERT_NOTHING`, the key exists, do nothing.
     //         `INSERT_KV`,      no such key exists, and insert k-v.
-    uint32_t BTree::INSERT_NONFULL(base_ptr node, const KVEntry& kvEntry, bool hold_node_write_lock)
+    // operation:
+    //          I:  node is LEAF
+    //              1. find index such that kEntry <= node.k[index]
+    //              2. if equal, return `INSERT_NOTHING`. (note to validate index)
+    //              3. move the index to right, then insert(++BT.size), release write-lock.
+    //          II:  node is INTERNAL
+    //              1. find index such that kEntry <= node.k[index]
+    //              2. hold write-lock of node.br[index]
+    //                 if need to split node.br[index], then split.
+    //              3. release write-lock of node, then hold the read-lock of node.
+    //              4. recursively go down then release read-lock.
+    uint32_t BTree::INSERT_NONFULL(base_ptr node, const KVEntry& kvEntry)
     {
-        if (!hold_node_write_lock)
-            node->page_write_lock();
+        // step 1: find index such that kEntry <= node.k[index]
+        uint32_t index = 0;
+        for (; index < node->nEntry_; index++)
+            if (key_compare(kvEntry.kEntry, node, index) <= 0)
+                break;
 
-        // insert if node is `LEAF`
+        uint32_t insert_return;
+
+        // node is `LEAF`, insert and return.
         if (node->get_page_t() == page_t_t::LEAF)
         {
+            // step 2: if equal, return `INSERT_NOTHING`. (note to validate index)
+            if (index != node->nEntry_ && // kEntry > all node.keys, insert!!!
+                key_compare(kvEntry.kEntry, node, index) == 0)
+                insert_return = INSERT_NOTHING;
 
+            // step 3: move the index to right, then insert(++BT.size), release write-lock.
+            else {
+                size_++; // increase B+Tree size
+                leaf_ptr leaf = static_cast<leaf_ptr>(node);
+                leaf->nEntry_++;
+                // also valid when index is out of range :), since `index == leaf->nEntry_-1`
+                for (uint32_t i = leaf->nEntry_ - 1; i > index; i--) {
+                    leaf->keys_[i] = leaf->keys_[i - 1];
+                    leaf->values_[i] = leaf->values_[i - 1];
+                }
+                leaf->insert_key(index, kvEntry.kEntry);
+                leaf->insert_value(index, kvEntry.vEntry);
+                insert_return = INSERT_KV;
+                leaf->set_dirty();
+            }
+
+            node->page_write_unlock();
 
         } // end insert into LEAF
 
-        // recursively go down 
+
+        // node is `INTERNAL`, recursively go down.
         else
         {
+            // step 2: hold write-lock of node.br[index]
+            //         if need to split node.br[index], then split.
+            base_ptr child = fetch_node(static_cast<link_ptr>(node)->branch_[index]);
+            child->page_write_lock();
+            if (child->nEntry_ == MAX_KEY_SIZE)
+                split(static_cast<link_ptr>(node), index, child);
 
-        } // end 
+            // step 3: release write-lock of node, then hold the read-lock of node.
+            node->page_write_unlock();
+            node->page_read_lock();
 
-        node->page_write_unlock();
+            // step 4: recursively go down then release read-lock.
+            insert_return = INSERT_NONFULL(child, kvEntry);
+            node->page_read_unlock();
+
+            child->unref();
+
+        } // end recursively go down
+
+        return insert_return;
 
     }
 

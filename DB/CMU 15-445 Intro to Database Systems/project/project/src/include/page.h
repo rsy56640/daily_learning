@@ -201,7 +201,24 @@ namespace DB::page
     };
 
 
-    class RootPage :public BTreePage {
+    // for INTERNAL
+    class InternalPage :public BTreePage {
+        friend class ::DB::tree::BTree;
+    public:
+        InternalPage(page_t_t, page_id_t, page_id_t parent_id, uint32_t nEntry,
+            disk::DiskManager*, key_t_t, uint32_t str_len, bool isInit);
+        virtual ~InternalPage();
+
+        // update the all metadata into memory, for the later `flush()`.
+        virtual void update_data();
+
+    private:
+        page_id_t * branch_;     // nEntry + 1
+
+    }; // end class InternalPage
+
+
+    class RootPage :public InternalPage {
         friend class ::DB::tree::BTree;
         friend class BTreePage;
     public:
@@ -230,36 +247,13 @@ namespace DB::page
         virtual void update_data();
 
     private:
-
-        // for ROOT_INTERNAL
-        page_id_t * branch_;     // nEntry + 1
-
         // for ROOT_LEAF
         ValuePage * value_page_;
         page_id_t value_page_id_;
         uint32_t* values_; // points to offset of the value-blocks.
         page_id_t previous_page_id_, next_page_id_;
 
-
-    }; // end class InternalPage
-
-
-    // for INTERNAL
-    class InternalPage :public BTreePage {
-        friend class ::DB::tree::BTree;
-    public:
-        InternalPage(page_t_t, page_id_t, page_id_t parent_id, uint32_t nEntry,
-            disk::DiskManager*, key_t_t, uint32_t str_len, bool isInit);
-        virtual ~InternalPage();
-
-        // update the all metadata into memory, for the later `flush()`.
-        virtual void update_data();
-
-    private:
-        page_id_t * branch_;     // nEntry + 1
-
-    }; // end class InternalPage
-
+    }; // end class RootPage
 
 
     // the ValuePage stores the corresponding value to the key in LeafPage.

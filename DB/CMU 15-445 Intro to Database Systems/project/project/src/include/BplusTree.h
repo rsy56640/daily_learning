@@ -36,6 +36,10 @@ namespace DB::tree
     // Internal Page structure:
     //      [branch, key, ..., branch, key, branch]
     //      branch <= key < branch <= key < ... < branch <= key < branch
+    //           ____ LeafPage
+    //          /    
+    // BTreePage
+    //          \____ InternalPage ---- RootPage
     class BTree
     {
     public:
@@ -76,7 +80,9 @@ namespace DB::tree
 
     private:
 
+
         void BT_create(OpenTableInfo);
+
 
         // do nothing if BTree is empty.
         // return the min leaf.key that *** KeyEntry <= leaf.key ***
@@ -87,14 +93,17 @@ namespace DB::tree
         void search(const KeyEntry&, SearchInfo&) const;
         void doSearch(base_ptr node, const KeyEntry&, SearchInfo&) const;
 
+
         // Page* has been `ref()` before return.
         // `unref()` the Page after use ! ! !
         BTreePage* fetch_node(page_id_t page_id) const;
         BTreePage* fetch_node(base_ptr node, uint32_t index) const;
 
+
         // Page* has been `ref()` before return.
         // `unref()` the Page after use ! ! !
         BTreePage* allocate_node(PageInitInfo) const;
+
 
         // the only way to increase the height.
         // called when root is full.
@@ -111,10 +120,12 @@ namespace DB::tree
         //              3. set root.k[0] = root.k[7], set branch, adjust the relation
         void split_root();
 
+
         // REQUIREMENT: caller should hold the write-lock of both `node` and `L`.
         // node is non-full parent, split node.branch[index].
         // invoke `split_internal()` or `split_leaf()` on top of the page_t_t of `L`.
         void split(link_ptr node, uint32_t split_index, base_ptr L) const;
+
 
         // node is non-full parent, split node.branch[index].
         // node should hold the write lock.
@@ -125,6 +136,7 @@ namespace DB::tree
         //              4. move L.k[7] upto node.k[index], set node.br[index+1] = R
         void split_internal(link_ptr node, uint32_t index, link_ptr L) const;
 
+
         // node is non-full parent, split node.branch[index].
         // node should hold the write lock.
         // operation:
@@ -134,10 +146,25 @@ namespace DB::tree
         //              4. set node.k[index] = L.k[7], set node.br[index+1] = R
         void split_leaf(link_ptr node, uint32_t split_index, leaf_ptr L) const;
 
-        // node is non-full, non-root, insert if LEAF, else go down recursively.
+
+        // REQUIREMENT: caller should hold the write-lock of node, callee unlock.
+        //              node is non-full, non-root, insert if LEAF, else go down recursively.
         // return: `INSERT_NOTHING`, the key exists, do nothing.
         //         `INSERT_KV`,      no such key exists, and insert k-v.
-        uint32_t INSERT_NONFULL(base_ptr node, const KVEntry&, bool hold_node_write_lock);
+        // operation:
+        //          I:  node is LEAF
+        //              1. find index such that kEntry <= node.k[index]
+        //              2. if equal, return `INSERT_NOTHING`. (note to validate index)
+        //              3. move the index to right, then insert(++BT.size), release write-lock.
+        //          II:  node is INTERNAL
+        //              1. find index such that kEntry <= node.k[index]
+        //              2. hold write-lock of node.br[index]
+        //                 if need to split node.br[index], then split.
+        //              3. release write-lock of node, then hold the read-lock of node.
+        //              4. recursively go down then release read-lock.
+        uint32_t INSERT_NONFULL(base_ptr node, const KVEntry&);
+
+
 
 
 
@@ -157,7 +184,6 @@ namespace DB::tree
         std::atomic<uint32_t> size_;
         mutable std::shared_mutex range_query_lock_; // hold write-lock when do range query,
                                                      // otherwise hole read-lock.
-
     }; // end class BTree
 
 
