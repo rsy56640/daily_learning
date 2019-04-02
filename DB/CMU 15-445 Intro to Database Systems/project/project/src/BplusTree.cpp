@@ -122,6 +122,269 @@ namespace DB::tree
     } // end function `BTree::insert(kv)`
 
 
+      // return: `ERASE_NOTHING`, no such key exists.
+      //         `ERASE_KV`,      the key-value has been erased.
+      // operation:
+      //          I. root is ROOT_LEAF
+      //              1. directly delete if exists.
+      //          II. root is ROOT_INTERNAL
+      //              1.  a. root.nEntry = 1, call it (the founded one) as child.
+      //                     1) child is LEAF
+      //                          1. child.nEntry > MIN_KEY, directly delete. (return)
+      //                          2. child.nEntry = MIN_KEY
+      //                              1] other-child.nEntry > MIN_KEY
+      //                                  if delete child.key successfully,
+      //                                  steal 1 k-v from other-child.
+      //                              2] other-child.nEntry = MIN_KEY
+      //                                  *** This is the only case root -> ROOT_LEAF ***
+      //                                  change root to ROOT_LEAF.
+      //                                  steal the 2 childs' k-v.
+      //                                  delete 2 childs.
+      //                     2) child is INTERNAL
+      //                          1. child.nEntry > MIN_KEY
+      //                              find K_index, recusively go down (from child).
+      //                          2. child.nEntry = MIN_KEY
+      //                              1] other-child.nEntry > MIN_KEY
+      //                                  *steal* one key/branch
+      //                              2] other-child.nEntry = MIN_KEY
+      //                                  *merge* 2 childs into root.
+      //                  b. root.nEntry > 1
+      //                     find K_index, recusively go down.
+    uint32_t BTree::erase(const KeyEntry& kEntry)
+    {
+        root_ptr root = static_cast<root_ptr>(root_);
+        root->page_write_lock();
+        uint32_t erase_return;
+
+        // I.root is ROOT_LEAF
+        if (root->get_page_t() == page_t_t::ROOT_LEAF)
+        {
+            // 1. directly delete if exists.
+            uint32_t index = 0;
+            for (; index < root->nEntry_; index++)
+                if (key_compare(kEntry, root, index) == 0)
+                    break;
+            if (index == root->nEntry_)
+                erase_return = ERASE_NOTHING;
+            else
+            {
+                erase_return = ERASE_KV;
+                root->erase_key(index);
+                root->erase_value(index);
+                root->nEntry_--;
+                for (uint32_t i = index; i < root->nEntry_; i++)
+                {
+                    root->keys_[i] = root->keys_[i + 1];
+                    root->values_[i] = root->values_[i + 1];
+                }
+                root->set_dirty();
+            }
+
+            root_->page_write_unlock();
+
+        } // end root is ROOT_LEAF
+
+
+        // II.root is ROOT_INTERNAL
+        else
+        {
+            // 1.  a. root.nEntry = 1, call it (the founded one) as child.
+            if (root->nEntry_ == 1)
+            {
+                bool child_L = true;
+                base_ptr child, other_child;
+                if (key_compare(kEntry, root, 0) <= 0) {
+                    child = fetch_node(root->branch_[0]); // TODO: unref();
+                    other_child = fetch_node(root->branch_[1]);
+                }
+                else {
+                    child_L = false;
+                    other_child = fetch_node(root->branch_[0]);
+                    child = fetch_node(root->branch_[1]);
+                }
+                child->page_write_lock();
+
+
+                // 1) child is LEAF
+                if (child->get_page_t() == page_t_t::LEAF)
+                {
+                    leaf_ptr child_leaf = static_cast<leaf_ptr>(child);
+                    leaf_ptr other_child_leaf = static_cast<leaf_ptr>(other_child);
+
+
+                    // 1. child.nEntry > MIN_KEY, directly delete. (return)
+                    if (child_leaf->nEntry_ > MIN_KEY_SIZE)
+                    {
+                        uint32_t K_index = 0;
+                        for (; K_index < child_leaf->nEntry_; K_index++)
+                            if (key_compare(kEntry, child_leaf, K_index) == 0)
+                                break;
+                        if (K_index == child_leaf->nEntry_)
+                            erase_return = ERASE_NOTHING;
+                        else
+                        {
+                            erase_return = ERASE_KV;
+                            child_leaf->erase_key(K_index);
+                            child_leaf->erase_value(K_index);
+                            child_leaf->nEntry_--;
+                            for (uint32_t i = K_index; i < child_leaf->nEntry_; i++)
+                            {
+                                child_leaf->keys_[i] = child_leaf->keys_[i + 1];
+                                child_leaf->values_[i] = child_leaf->values_[i + 1];
+                            }
+                            child_leaf->set_dirty();
+                        }
+                    } // end child.nEntry > MIN_KEY, directly delete. (return)
+
+
+                    // 2. child.nEntry = MIN_KEY
+                    else
+                    {
+                        other_child->page_write_lock();
+
+                        // 1] other-child.nEntry > MIN_KEY
+                        if (other_child_leaf->nEntry_ > MIN_KEY_SIZE)
+                        {
+                            // if delete child.key successfully, steal 1 k-v from other-child.
+                            uint32_t K_index = 0;
+                            for (; K_index < child_leaf->nEntry_; K_index++)
+                                if (key_compare(kEntry, child_leaf, K_index) == 0)
+                                    break;
+                            if (K_index == child_leaf->nEntry_)
+                                erase_return = ERASE_NOTHING;
+                            else // successfully, steal 1 k-v from other-child.
+                            {
+                                erase_return = ERASE_KV;
+                                child_leaf->erase_key(K_index);
+                                child_leaf->erase_value(K_index);
+                                child_leaf->nEntry_--;
+
+                                // steal from right.k-v[0]
+                                if (child_L)
+                                {
+                                    // shift left
+                                    for (uint32_t i = K_index; i < child_leaf->nEntry_; i++)
+                                    {
+                                        child_leaf->keys_[i] = child_leaf->keys_[i + 1];
+                                        child_leaf->values_[i] = child_leaf->values_[i + 1];
+                                    }
+
+                                    // steal right.k-v[0]
+                                    KeyEntry kEntry_steal = other_child_leaf->read_key(0);
+                                    ValueEntry vEntry_steal;
+                                    other_child_leaf->read_value(0, vEntry_steal);
+                                    child_leaf->insert_key(child_leaf->nEntry_, kEntry_steal);
+                                    child_leaf->insert_value(child_leaf->nEntry_, vEntry_steal);
+                                    child_leaf->nEntry_++;
+
+                                    // shift left
+                                    other_child_leaf->erase_key(0);
+                                    other_child_leaf->erase_value(0);
+                                    other_child_leaf->nEntry_--;
+                                    for (uint32_t i = 0; i < other_child_leaf->nEntry_; i++)
+                                    {
+                                        other_child_leaf->keys_[i] = other_child_leaf->keys_[i + 1];
+                                        other_child_leaf->values_[i] = other_child_leaf->values_[i + 1];
+                                    }
+
+                                } // end steal from right.k-v[0]
+
+                                // steal from left.k-v[nEntry-1]
+                                else
+                                {
+                                    // shift right
+                                    for (uint32_t i = K_index; i > 0; i--)
+                                    {
+                                        child_leaf->keys_[i] = child_leaf->keys_[i - 1];
+                                        child_leaf->values_[i] = child_leaf->values_[i - 1];
+                                    }
+
+                                    // steal left.k-v[nEntry-1]
+                                    const uint32_t L_nEntry = other_child_leaf->nEntry_;
+                                    KeyEntry kEntry_steal = other_child_leaf->read_key(L_nEntry - 1);
+                                    ValueEntry vEntry_steal;
+                                    other_child_leaf->read_value(L_nEntry - 1, vEntry_steal);
+                                    child_leaf->insert_key(0, kEntry_steal);
+                                    child_leaf->insert_value(0, vEntry_steal);
+                                    child_leaf->nEntry_++;
+
+                                    // shift left
+                                    other_child_leaf->erase_key(L_nEntry - 1);
+                                    other_child_leaf->erase_value(L_nEntry - 1);
+                                    other_child_leaf->nEntry_--;
+
+                                } // end steal from left.k-v[MIN_KEY_SIZE-1]
+
+                                other_child_leaf->set_dirty();
+                                child_leaf->set_dirty();
+                            }
+
+                        } // end other-child.nEntry > MIN_KEY
+
+                        // 2] other-child.nEntry = MIN_KEY
+                        else
+                        {
+                            // *** This is the only case root -> ROOT_LEAF ***
+                            // change root to ROOT_LEAF.
+                            // steal the 2 childs' k-v.
+                            // delete 2 childs.
+                            // TODO:
+
+
+
+
+                        } // end other-child.nEntry = MIN_KEY
+
+                        other_child->page_write_unlock();
+
+                    } // end child.nEntry = MIN_KEY
+
+                    child->page_write_unlock();
+                    root->page_write_unlock();
+
+                } // end child is LEAF
+
+
+                // 2) child is INTERNAL
+                else
+                {
+                    // TODO:
+
+
+                    // 1. child.nEntry > MIN_KEY
+                    //     find K_index, recusively go down (from child).
+                    // 2. child.nEntry = MIN_KEY
+                    //     1] other-child.nEntry > MIN_KEY
+                    //         *steal* one key/branch
+                    //     2] other-child.nEntry = MIN_KEY
+                    //         *merge* 2 childs into root.
+                }
+
+                child->unref();
+                other_child->unref();
+
+            } // end root.nEntry = 1, call it (the founded one) as child.
+
+            // b. root.nEntry > 1
+            else
+            {
+                // find K_index, recusively go down.
+                uint32_t K_index = 0;
+                for (; K_index < root->nEntry_; K_index++)
+                    if (key_compare(kEntry, root, K_index) <= 0)
+                        break;
+                base_ptr root_child = fetch_node(root->branch_[K_index]);
+                erase_return = ERASE_NONMIN(root, K_index, root_child, kEntry);
+                root_child->unref();
+            }
+
+        } // end root is ROOT_INTERNAL
+
+        return erase_return;
+
+    } // end function `BTree::erase(k)`
+
+
     /////////////////////////////// private implementation ///////////////////////////////
 
 
@@ -557,6 +820,15 @@ namespace DB::tree
 
     }
 
+
+
+
+    uint32_t BTree::ERASE_NONMIN(base_ptr node, uint32_t index, base_ptr child, const KeyEntry& kEntry)
+    {
+
+
+
+    }
 
 
     // return:

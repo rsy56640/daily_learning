@@ -66,17 +66,47 @@ namespace DB::tree
 
         uint32_t size() const;
 
+
         // return state: `OBSOLETE` denotes no such key exists.
         //               `INUSED` ensures the value cotent is 
         ValueEntry find(const KeyEntry&) const;
+
 
         // return: `INSERT_NOTHING`, the key exists, do nothing.
         //         `INSERT_KV`,      no such key exists, and insert k-v.
         uint32_t insert(const KVEntry&);
 
+
         // return: `ERASE_NOTHING`, no such key exists.
         //         `ERASE_KV`,      the key-value has been erased.
+        // operation:
+        //          I. root is ROOT_LEAF
+        //              1. directly delete if exists.
+        //          II. root is ROOT_INTERNAL
+        //              1.  a. root.nEntry = 1, call it (the founded one) as child.
+        //                     1) child is LEAF
+        //                          1. child.nEntry > MIN_KEY, directly delete. (return)
+        //                          2. child.nEntry = MIN_KEY
+        //                              1] other-child.nEntry > MIN_KEY
+        //                                  if delete child.key successfully,
+        //                                  steal 1 k-v from other-child.
+        //                              2] other-child.nEntry = MIN_KEY
+        //                                  *** This is the only case root -> ROOT_LEAF ***
+        //                                  change root to ROOT_LEAF.
+        //                                  steal the 2 childs' k-v.
+        //                                  delete 2 childs.
+        //                     2) child is INTERNAL
+        //                          1. child.nEntry > MIN_KEY
+        //                              find K_index, recusively go down (from child).
+        //                          2. child.nEntry = MIN_KEY
+        //                              1] other-child.nEntry > MIN_KEY
+        //                                  *steal* one key/branch
+        //                              2] other-child.nEntry = MIN_KEY
+        //                                  *merge* 2 childs into root.
+        //                  b. root.nEntry > 1
+        //                     find K_index, recusively go down.
         uint32_t erase(const KeyEntry&);
+
 
     private:
 
@@ -165,7 +195,60 @@ namespace DB::tree
         uint32_t INSERT_NONFULL(base_ptr node, const KVEntry&);
 
 
+        //
+        //
+        //
+        void merge(link_ptr node, uint32_t merge_index, base_ptr L, base_ptr R);
 
+
+        //
+        //
+        //
+        void merge_internal(link_ptr node, uint32_t merge_index, link_ptr L, link_ptr R);
+
+
+        //
+        //
+        //
+        void merge_leaf(link_ptr node, uint32_t merge_index, leaf_ptr L, leaf_ptr R);
+
+
+        // REQUIREMENT: 
+        //              1. when call this function, the root must be ROOT_INTERNAL.
+        //              2. if node is INTERNAL, node.nEntry >= MIN_KEY+1
+        //              3. if node is root, root.nEntry >= 2
+        //              4. caller hold write-lock of node, callee should unlock. (UNDONE: read-lock??)
+        // return: `ERASE_NOTHING`,     the key does not exist, do nothing.
+        //         `ERASE_KV`,          the key exist and k-v has been deleted.
+        // operation:
+        //          I. child is LEAF
+        //              1.  a. child.nEntry > MIN_KEY
+        //                     directly deleted if key exists. (return)
+        //                  b. child.nEntry = MIN_KEY
+        //                     1) left(right)-leaf.nEntry > MIN_KEY
+        //                          *steal* 1 k-v from that leaf.
+        //                          adjust node.key, child, leaf.
+        //                          directly deleted if key exists. (return)
+        //                     2) left(right)-leaf.nEntry = MIN_KEY
+        //                          *merge* 2 leaf. (NB: manage ValuePage lifetime, left-right)
+        //                          delete noed.key[index], adjust node.branch, node.nEntry--
+        //                          directly deleted if key exists. (return)
+        //          II. child is INTERNAL
+        //              1.  a. child.nEntry > MIN_KEY
+        //                     find K_index, such that child.key[K_index] <= kEntry
+        //                     recusively go down.
+        //                  b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
+        //                     1) R.nEntry > MIN_KEY
+        //                          *steal* R.key[0] and R.branch[0] to child.
+        //                          set node.key[index] = R.key[0]
+        //                          find K_index, recusively go down.
+        //                     2) R.nEntry = MIN_KEY
+        //                          *merge* child and R into child.
+        //                              move R.key[0..6] -> child.key[8..14]
+        //                              move noed.key[index] -> child.key[7]
+        //                              adjust node.key and node.branch
+        //                          find K_index, recusively go down.
+        uint32_t ERASE_NONMIN(base_ptr node, uint32_t index, base_ptr child, const KeyEntry&);
 
 
         // return:
