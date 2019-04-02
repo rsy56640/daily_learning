@@ -36,10 +36,10 @@ namespace DB::tree
     // Internal Page structure:
     //      [branch, key, ..., branch, key, branch]
     //      branch <= key < branch <= key < ... < branch <= key < branch
-    //           ____ LeafPage
-    //          /    
-    // BTreePage
-    //          \____ InternalPage ---- RootPage
+    //           ____ LeafPage____
+    //          /                 \____   (no inheritence)
+    // BTreePage                       \
+    //          \____ InternalPage_____RootPage
     class BTree
     {
     public:
@@ -100,7 +100,7 @@ namespace DB::tree
         //                              find K_index, recusively go down (from child).
         //                          2. child.nEntry = MIN_KEY
         //                              1] other-child.nEntry > MIN_KEY
-        //                                  *steal* one key/branch
+        //                                  *steal* one key/branch // (NB: set node.k[index] = max_KEntry)
         //                              2] other-child.nEntry = MIN_KEY
         //                                  *merge* 2 childs into root.
         //                  b. root.nEntry > 1
@@ -195,22 +195,23 @@ namespace DB::tree
         uint32_t INSERT_NONFULL(base_ptr node, const KVEntry&);
 
 
-        //
-        //
-        //
-        void merge(link_ptr node, uint32_t merge_index, base_ptr L, base_ptr R);
+        // return the maximum KeyEntry in the tree from page_id.
+        KeyEntry max_KeyEntry(page_id_t);
 
 
-        //
-        //
+        // all write-lock held
         //
         void merge_internal(link_ptr node, uint32_t merge_index, link_ptr L, link_ptr R);
 
 
-        //
-        //
-        //
+        // all write-lock held
+        // move R into L, erase node.k[index], node.br[index+1]
         void merge_leaf(link_ptr node, uint32_t merge_index, leaf_ptr L, leaf_ptr R);
+
+
+        // REQUIREMENT:
+        //              1. caller hold the write-lock of leaf.
+        uint32_t erase_from_leaf(leaf_ptr, const KeyEntry&);
 
 
         // REQUIREMENT: 
@@ -240,7 +241,7 @@ namespace DB::tree
         //                  b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
         //                     1) R.nEntry > MIN_KEY
         //                          *steal* R.key[0] and R.branch[0] to child.
-        //                          set node.key[index] = R.key[0]
+        //                          set node.key[index] = max_KEntry(child.br[nEntry])
         //                          find K_index, recusively go down.
         //                     2) R.nEntry = MIN_KEY
         //                          *merge* child and R into child.
@@ -248,7 +249,7 @@ namespace DB::tree
         //                              move noed.key[index] -> child.key[7]
         //                              adjust node.key and node.branch
         //                          find K_index, recusively go down.
-        uint32_t ERASE_NONMIN(base_ptr node, uint32_t index, base_ptr child, const KeyEntry&);
+        uint32_t ERASE_NONMIN(link_ptr node, uint32_t index, base_ptr child, const KeyEntry&);
 
 
         // return:

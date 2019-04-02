@@ -122,39 +122,39 @@ namespace DB::tree
     } // end function `BTree::insert(kv)`
 
 
-      // return: `ERASE_NOTHING`, no such key exists.
-      //         `ERASE_KV`,      the key-value has been erased.
-      // operation:
-      //          I. root is ROOT_LEAF
-      //              1. directly delete if exists.
-      //          II. root is ROOT_INTERNAL
-      //              1.  a. root.nEntry = 1, call it (the founded one) as child.
-      //                     1) child is LEAF (remember to release root write-locks)
-      //                          1. child.nEntry > MIN_KEY, directly delete. (return)
-      //                          2. child.nEntry = MIN_KEY
-      //                              1] other-child.nEntry > MIN_KEY
-      //                                  if delete child.key successfully,
-      //                                  steal 1 k-v from other-child.
-      //                              2] other-child.nEntry = MIN_KEY
-      //                                  *** This is the only case root -> ROOT_LEAF ***
-      //                                  change root to ROOT_LEAF.
-      //                                  steal the 2 childs' k-v.
-      //                                  delete 2 childs.
-      //                     2) child is INTERNAL
-      //                          1. child.nEntry > MIN_KEY
-      //                              find K_index, recusively go down (from child).
-      //                          2. child.nEntry = MIN_KEY
-      //                              1] other-child.nEntry > MIN_KEY
-      //                                  *steal* one key/branch
-      //                              2] other-child.nEntry = MIN_KEY
-      //                                  *merge* 2 childs into root.
-      //                  b. root.nEntry > 1
-      //                     find K_index, recusively go down.
+    // return: `ERASE_NOTHING`, no such key exists.
+    //         `ERASE_KV`,      the key-value has been erased.
+    // operation:
+    //          I. root is ROOT_LEAF
+    //              1. directly delete if exists.
+    //          II. root is ROOT_INTERNAL
+    //              1.  a. root.nEntry = 1, call it (the founded one) as child.
+    //                     1) child is LEAF (remember to release root write-locks)
+    //                          1. child.nEntry > MIN_KEY, directly delete. (return)
+    //                          2. child.nEntry = MIN_KEY
+    //                              1] other-child.nEntry > MIN_KEY
+    //                                  if delete child.key successfully,
+    //                                  steal 1 k-v from other-child.
+    //                              2] other-child.nEntry = MIN_KEY
+    //                                  *** This is the only case root -> ROOT_LEAF ***
+    //                                  change root to ROOT_LEAF.
+    //                                  steal the 2 childs' k-v.
+    //                                  delete 2 childs.
+    //                     2) child is INTERNAL
+    //                          1. child.nEntry > MIN_KEY
+    //                              find K_index, recusively go down (from child).
+    //                          2. child.nEntry = MIN_KEY
+    //                              1] other-child.nEntry > MIN_KEY
+    //                                  *steal* one key/branch // (NB: set node.k[index] = max_KEntry)
+    //                              2] other-child.nEntry = MIN_KEY
+    //                                  *merge* 2 childs into root.
+    //                  b. root.nEntry > 1
+    //                     find K_index, recusively go down.
     uint32_t BTree::erase(const KeyEntry& kEntry)
     {
         root_ptr root = static_cast<root_ptr>(root_);
         root->page_write_lock();
-        uint32_t erase_return;
+
 
         // I.root is ROOT_LEAF
         if (root->get_page_t() == page_t_t::ROOT_LEAF)
@@ -164,11 +164,13 @@ namespace DB::tree
             for (; index < root->nEntry_; index++)
                 if (key_compare(kEntry, root, index) == 0)
                     break;
-            if (index == root->nEntry_)
-                erase_return = ERASE_NOTHING;
+            if (index == root->nEntry_) {
+                root_->page_write_unlock();
+                return ERASE_NOTHING;
+            }
             else
             {
-                erase_return = ERASE_KV;
+                size_--; // BT size
                 root->erase_key(index);
                 root->erase_value(index);
                 root->nEntry_--;
@@ -178,9 +180,9 @@ namespace DB::tree
                     root->values_[i] = root->values_[i + 1];
                 }
                 root->set_dirty();
+                root_->page_write_unlock();
+                return ERASE_KV;
             }
-
-            root_->page_write_unlock();
 
         } // end root is ROOT_LEAF
 
@@ -188,7 +190,7 @@ namespace DB::tree
         // II.root is ROOT_INTERNAL
         else
         {
-            // 1.  a. root.nEntry = 1, call it (the founded one) as child.
+            // a. root.nEntry = 1, call it (the founded one) as child.
             if (root->nEntry_ == 1)
             {
                 bool child_L = true;
@@ -218,11 +220,16 @@ namespace DB::tree
                         for (; K_index < child_leaf->nEntry_; K_index++)
                             if (key_compare(kEntry, child_leaf, K_index) == 0)
                                 break;
-                        if (K_index == child_leaf->nEntry_)
-                            erase_return = ERASE_NOTHING;
+                        if (K_index == child_leaf->nEntry_) {
+                            child->page_write_unlock();
+                            root_->page_write_unlock();
+                            child->unref();
+                            other_child->unref();
+                            return ERASE_NOTHING;
+                        }
                         else
                         {
-                            erase_return = ERASE_KV;
+                            size_--; // BT size
                             child_leaf->erase_key(K_index);
                             child_leaf->erase_value(K_index);
                             child_leaf->nEntry_--;
@@ -232,6 +239,13 @@ namespace DB::tree
                                 child_leaf->values_[i] = child_leaf->values_[i + 1];
                             }
                             child_leaf->set_dirty();
+
+                            child->page_write_unlock();
+                            root->page_write_unlock();
+                            child->unref();
+                            other_child->unref();
+
+                            return ERASE_KV;
                         }
                     } // end child.nEntry > MIN_KEY, directly delete. (return)
 
@@ -249,11 +263,17 @@ namespace DB::tree
                             for (; K_index < child_leaf->nEntry_; K_index++)
                                 if (key_compare(kEntry, child_leaf, K_index) == 0)
                                     break;
-                            if (K_index == child_leaf->nEntry_)
-                                erase_return = ERASE_NOTHING;
+                            if (K_index == child_leaf->nEntry_) {
+                                other_child->page_write_unlock();
+                                child->page_write_unlock();
+                                root_->page_write_unlock();
+                                child->unref();
+                                other_child->unref();
+                                return ERASE_NOTHING;
+                            }
                             else // successfully, steal 1 k-v from other-child.
                             {
-                                erase_return = ERASE_KV;
+                                size_--; // BT size
                                 child_leaf->erase_key(K_index);
                                 child_leaf->erase_value(K_index);
                                 child_leaf->nEntry_--;
@@ -317,6 +337,14 @@ namespace DB::tree
                                 other_child_leaf->set_dirty();
                                 child_leaf->set_dirty();
 
+                                other_child->page_write_unlock();
+                                child->page_write_unlock();
+                                root_->page_write_unlock();
+                                child->unref();
+                                other_child->unref();
+
+                                return ERASE_KV;
+
                             } // end steal 1 k-v from other-child
 
                         } // end other-child.nEntry > MIN_KEY
@@ -363,19 +391,25 @@ namespace DB::tree
                                 R->erase_key(index);    // maybe ununsed
                                 R->erase_value(index);  // maybe ununsed
                             }
-
                             root->nEntry_ = MIN_KEY_SIZE << 1;
+
+                            other_child->page_write_unlock();
+                            child->page_write_unlock();
+                            child->unref();
+                            other_child->unref();
 
                             // directly delete
                             uint32_t K_index = 0;
                             for (; K_index < root->nEntry_; K_index++)
                                 if (key_compare(kEntry, root, K_index) == 0)
                                     break;
-                            if (K_index == root->nEntry_)
-                                erase_return = ERASE_NOTHING;
+                            if (K_index == root->nEntry_) {
+                                root_->page_write_unlock();
+                                return ERASE_NOTHING;
+                            }
                             else
                             {
-                                erase_return = ERASE_KV;
+                                size_--; // BT size
                                 root->erase_key(K_index);
                                 root->erase_value(K_index);
                                 root->nEntry_--;
@@ -384,20 +418,18 @@ namespace DB::tree
                                     root->keys_[i] = root->keys_[i + 1];
                                     root->values_[i] = root->values_[i + 1];
                                 }
+
+                                root_->page_write_unlock();
+
+                                return ERASE_KV;
                             }
 
-                            // UNDONE: how to delete the page??? GC ???
-                            L->set_dirty();
-                            R->set_dirty();
 
                         } // end other-child.nEntry = MIN_KEY (aka. merge to ROOT_LEAF)
 
-                        other_child->page_write_unlock();
 
                     } // end child.nEntry = MIN_KEY
 
-                    child->page_write_unlock();
-                    root_->page_write_unlock();
 
                 } // end child is LEAF (remember to release root write-locks)
 
@@ -411,14 +443,25 @@ namespace DB::tree
                     // 1. child.nEntry > MIN_KEY
                     if (child_link->nEntry_ > MIN_KEY_SIZE)
                     {
+                        other_child->unref();
+
                         // find K_index, recusively go down (from child).
+                        root->page_write_unlock();
+                        root->page_read_lock();
+
                         uint32_t K_index = 0;
                         for (; K_index < child_link->nEntry_; K_index++)
                             if (key_compare(kEntry, child_link, K_index) <= 0)
                                 break;
                         base_ptr child_child = fetch_node(child_link->branch_[K_index]);
-                        erase_return = ERASE_NONMIN(child, K_index, child_child, kEntry);
+                        uint32_t erase_return = ERASE_NONMIN(child_link, K_index, child_child, kEntry);
                         child_child->unref();
+
+                        child_link->unref(); // here special, since no caller
+
+                        root->page_read_unlock();
+
+                        return erase_return;
 
                     } // end child.nEntry > MIN_KEY
 
@@ -431,7 +474,7 @@ namespace DB::tree
                         // 1] other-child.nEntry > MIN_KEY
                         if (other_child_link->nEntry_ > MIN_KEY_SIZE)
                         {
-                            // *steal* one key/branch
+                            // *steal* one key / branch // (NB: set node.k[index] = max_KEntry)
 
                             // child is left, steal right.k-br[0]
                             if (child_L)
@@ -452,6 +495,12 @@ namespace DB::tree
                                     R->branch_[i] = R->branch_[i + 1];
                                 }
                                 R->branch_[R->nEntry_] = R->branch_[R->nEntry_ + 1];
+
+                                // set root.k[0] // carefully
+                                kEntry_steal = max_KeyEntry(L->branch_[L->nEntry_]);
+                                root->erase_key(0);
+                                root->insert_key(0, kEntry_steal);
+                                root->set_dirty();
 
                             } // end child is left, steal right.k-br[0]
 
@@ -479,10 +528,20 @@ namespace DB::tree
                                 L->set_dirty();
                                 R->set_dirty();
 
+                                // set root.k[0]
+                                kEntry_steal = max_KeyEntry(L->branch_[L->nEntry_]);
+                                root->erase_key(0);
+                                root->insert_key(0, kEntry_steal);
+                                root->set_dirty();
+
                             } // end child is right, steal left.k[nEntry-1], br[nEntry]
 
                             // hold child write-lock
                             other_child->page_write_unlock();
+                            other_child->unref();
+
+                            root->page_write_unlock();
+                            root->page_read_lock();
 
                             // find K_index, recusively go down.
                             uint32_t K_index = 0;
@@ -490,8 +549,14 @@ namespace DB::tree
                                 if (key_compare(kEntry, child_link, K_index) <= 0)
                                     break;
                             base_ptr child_child = fetch_node(child_link->branch_[K_index]);
-                            erase_return = ERASE_NONMIN(child, K_index, child_child, kEntry);
+                            uint32_t erase_return = ERASE_NONMIN(child_link, K_index, child_child, kEntry);
                             child_child->unref();
+
+                            child_link->unref(); // here special, since no caller
+
+                            root->page_read_unlock();
+
+                            return erase_return;
 
                         } // end other-child.nEntry > MIN_KEY
 
@@ -536,9 +601,10 @@ namespace DB::tree
 
                             root->nEntry_ = MAX_KEY_SIZE;
 
-                            // how to delete ???
                             child->page_write_unlock();
                             other_child->page_write_unlock();
+                            child->unref();
+                            other_child->unref();
 
                             // find K_index, recusively go down.
                             uint32_t K_index = 0;
@@ -547,8 +613,10 @@ namespace DB::tree
                                     break;
                             base_ptr root_child = fetch_node(root->branch_[K_index]);
                             // hold root write-lock
-                            erase_return = ERASE_NONMIN(root, K_index, root_child, kEntry);
+                            uint32_t erase_return = ERASE_NONMIN(root, K_index, root_child, kEntry);
                             root_child->unref();
+
+                            return erase_return;
 
                         } // end other-child.nEntry = MIN_KEY
 
@@ -557,8 +625,6 @@ namespace DB::tree
 
                 } // end child is INTERNAL
 
-                child->unref();
-                other_child->unref();
 
             } // end root.nEntry = 1, call it (the founded one) as child.
 
@@ -572,13 +638,15 @@ namespace DB::tree
                         break;
                 base_ptr root_child = fetch_node(root->branch_[K_index]);
                 // hold root write-lock
-                erase_return = ERASE_NONMIN(root, K_index, root_child, kEntry);
+                uint32_t erase_return = ERASE_NONMIN(root, K_index, root_child, kEntry);
                 root_child->unref();
+
+                return erase_return;
             }
 
         } // end root is ROOT_INTERNAL
 
-        return erase_return;
+
 
     } // end function `BTree::erase(k)`
 
@@ -1019,14 +1087,416 @@ namespace DB::tree
     }
 
 
-
-
-    uint32_t BTree::ERASE_NONMIN(base_ptr node, uint32_t index, base_ptr child, const KeyEntry& kEntry)
+    // return the maximum KeyEntry in the tree from page_id.
+    KeyEntry BTree::max_KeyEntry(page_id_t page_id)
     {
-
+        // TODO: max_KeyEntry
 
 
     }
+
+
+    void BTree::merge_internal(link_ptr node, uint32_t merge_index, link_ptr L, link_ptr R)
+    {
+        // TODO: merge_internal()
+    }
+
+
+    // all write-lock held
+    // move R into L, erase node.k[index], node.br[index+1]
+    void BTree::merge_leaf(link_ptr node, uint32_t merge_index, leaf_ptr L, leaf_ptr R)
+    {
+        // TODO: merge_leaf()
+    }
+
+
+    // REQUIREMENT:
+    //              1. caller hold the write-lock of leaf.
+    uint32_t BTree::erase_from_leaf(leaf_ptr leaf, const KeyEntry& kEntry)
+    {
+        // directly deleted if key exists. (return)
+        uint32_t K_index = 0;
+        for (; K_index < leaf->nEntry_; K_index++)
+            if (key_compare(kEntry, leaf, K_index) == 0)
+                break;
+        if (K_index == leaf->nEntry_)
+            return ERASE_NOTHING;
+        else
+        {
+            size_--; // BT size
+
+            leaf->erase_key(K_index);
+            leaf->erase_value(K_index);
+            leaf->nEntry_--;
+
+            // shift left
+            for (uint32_t i = K_index; i < leaf->nEntry_; i++)
+            {
+                leaf->keys_[i] = leaf->keys_[i + 1];
+                leaf->values_[i] = leaf->values_[i + 1];
+            }
+
+            leaf->set_dirty();
+            return ERASE_KV;
+        }
+    } // end function `erase_from_leaf(leaf, k)`
+
+
+    // REQUIREMENT: 
+    //              1. when call this function, the root must be ROOT_INTERNAL.
+    //              2. if node is INTERNAL, node.nEntry >= MIN_KEY+1
+    //              3. if node is root, root.nEntry >= 2
+    //              4. caller hold write-lock of node, callee should unlock. (UNDONE: read-lock??)
+    // return: `ERASE_NOTHING`,     the key does not exist, do nothing.
+    //         `ERASE_KV`,          the key exist and k-v has been deleted.
+    // operation:
+    //          I. child is LEAF
+    //              1.  a. child.nEntry > MIN_KEY
+    //                     directly deleted if key exists. (return)
+    //                  b. child.nEntry = MIN_KEY
+    //                     1) left(right)-leaf.nEntry > MIN_KEY
+    //                          *steal* 1 k-v from that leaf.
+    //                          adjust node.key, child, leaf.
+    //                          directly deleted if key exists. (return)
+    //                     2) left(right)-leaf.nEntry = MIN_KEY
+    //                          *merge* 2 leaf. (NB: manage ValuePage lifetime, left-right)
+    //                          delete noed.key[index], adjust node.branch, node.nEntry--
+    //                          directly deleted if key exists. (return)
+    //          II. child is INTERNAL
+    //              1.  a. child.nEntry > MIN_KEY
+    //                     find K_index, such that child.key[K_index] <= kEntry
+    //                     recusively go down.
+    //                  b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
+    //                     1) R.nEntry > MIN_KEY
+    //                          *steal* R.key[0] and R.branch[0] to child.
+    //                          set node.key[index] = max_KEntry(child.br[nEntry])
+    //                          find K_index, recusively go down.
+    //                     2) R.nEntry = MIN_KEY
+    //                          *merge* child and R into child.
+    //                              move R.key[0..6] -> child.key[8..14]
+    //                              move noed.key[index] -> child.key[7]
+    //                              adjust node.key and node.branch
+    //                          find K_index, recusively go down.
+    uint32_t BTree::ERASE_NONMIN(link_ptr node, uint32_t index, base_ptr child, const KeyEntry& kEntry)
+    {
+        child->page_write_lock();
+
+        // I. child is LEAF
+        if (child->get_page_t() == page_t_t::LEAF)
+        {
+
+            leaf_ptr child_leaf = static_cast<leaf_ptr>(child);
+
+            // a. child.nEntry > MIN_KEY
+            if (child_leaf->nEntry_ > MIN_KEY_SIZE)
+            {
+                node->page_write_unlock();
+                node->page_read_lock();
+
+                // directly deleted if key exists. (return)
+                uint32_t erase_return = erase_from_leaf(child_leaf, kEntry);
+
+                child->page_write_unlock();
+                node->page_read_unlock();
+                return erase_return;
+
+            } // end a. child.nEntry > MIN_KEY
+
+
+            // b. child.nEntry = MIN_KEY
+            else
+            {
+                // 1) left(right)-leaf.nEntry > MIN_KEY
+                //      *steal* 1 k-v from that leaf.
+                //      adjust node.key, child, leaf.
+                //      directly deleted if key exists. (return)
+                if (index != 0 // HACK: we suppose the steal and merge only take place in the same parent.
+                    && child_leaf->get_left_leaf() != NOT_A_PAGE)
+                {
+                    leaf_ptr left_leaf = static_cast<leaf_ptr>(fetch_node(child_leaf->get_left_leaf()));
+                    left_leaf->page_write_lock();
+
+                    if (left_leaf->nEntry_ > MIN_KEY_SIZE) // must return inside
+                    {
+                        // steal left.k-v[nEntry-1]
+
+                        // shift right child_leaf
+                        for (uint32_t i = child_leaf->nEntry_; i > 0; i--)
+                        {
+                            child_leaf->keys_[i] = child_leaf->keys_[i - 1];
+                            child_leaf->values_[i] = child_leaf->values_[i - 1];
+                        }
+                        child_leaf->nEntry_++;
+                        child_leaf->set_dirty();
+
+                        // steal left_leaf.k-v[nEntry-1]
+                        const uint32_t steal_index = left_leaf->nEntry_ - 1;
+                        KeyEntry kEntry_steal;
+                        ValueEntry vEntry_steal;
+                        kEntry_steal = left_leaf->read_key(steal_index);
+                        left_leaf->read_value(steal_index, vEntry_steal);
+                        child_leaf->insert_key(0, kEntry_steal);
+                        child_leaf->insert_value(0, vEntry_steal);
+                        left_leaf->erase_key(steal_index);
+                        left_leaf->erase_value(steal_index);
+                        left_leaf->nEntry_--;
+                        left_leaf->set_dirty();
+
+                        // set node.k[index-1]
+                        node->erase_key(index - 1);
+                        kEntry_steal = left_leaf->read_key(left_leaf->nEntry_ - 1);
+                        node->insert_key(index - 1, kEntry_steal);
+                        node->set_dirty();
+
+                        // directly deleted if key exists. (return)
+                        uint32_t erase_return = erase_from_leaf(child_leaf, kEntry);
+
+                        left_leaf->page_write_unlock();
+                        left_leaf->unref();
+                        child->page_write_unlock();
+                        node->page_write_unlock();
+
+                        return erase_return;
+                    }
+
+                    // if left.nEntry =  MIN
+                    left_leaf->page_write_unlock();
+                    left_leaf->unref();
+
+                }
+                // try to steal from right
+                if (index != node->nEntry_
+                    && child_leaf->get_right_leaf() != NOT_A_PAGE)
+                {
+                    leaf_ptr right_leaf = static_cast<leaf_ptr>(fetch_node(child_leaf->get_right_leaf()));
+                    right_leaf->page_write_lock();
+
+                    if (right_leaf->nEntry_ > MIN_KEY_SIZE) // must return inside
+                    {
+                        // steal right.k-v[0]
+                        KeyEntry kEntry_steal;
+                        ValueEntry vEntry_steal;
+                        kEntry_steal = right_leaf->read_key(0);
+                        right_leaf->read_value(0, vEntry_steal);
+                        child_leaf->insert_key(child_leaf->nEntry_, kEntry_steal);
+                        child_leaf->insert_value(child_leaf->nEntry_, vEntry_steal);
+                        child_leaf->nEntry_++;
+                        child_leaf->set_dirty();
+                        right_leaf->erase_key(0);
+                        right_leaf->erase_value(0);
+
+                        // right_leaf shift left
+                        right_leaf->nEntry_--;
+                        for (uint32_t i = 0; i < right_leaf->nEntry_; i++)
+                        {
+                            right_leaf->keys_[i] = right_leaf->keys_[i + 1];
+                            right_leaf->values_[i] = right_leaf->values_[i + 1];
+                        }
+                        right_leaf->set_dirty();
+
+                        // set node.k[index]
+                        node->erase_key(index);
+                        node->insert_key(index, kEntry_steal);
+                        node->set_dirty();
+
+                        // directly deleted if key exists. (return)
+                        uint32_t erase_return = erase_from_leaf(child_leaf, kEntry);
+
+                        right_leaf->page_write_unlock();
+                        right_leaf->unref();
+                        child->page_write_unlock();
+                        node->page_write_unlock();
+
+                        return erase_return;
+                    }
+
+                    // if right.nEntry = MIN
+                    right_leaf->page_write_unlock();
+                    right_leaf->unref();
+                }
+
+                // 2) left(right)-leaf.nEntry = MIN_KEY
+                //      *merge* 2 leaf. (NB: manage ValuePage lifetime, left-right)
+                //      delete noed.key[index], adjust node.branch, node.nEntry--
+                //      directly deleted if key exists. (return)
+                if (index != 0 // HACK: we suppose the steal and merge only take place in the same parent.
+                    && child_leaf->get_left_leaf() != NOT_A_PAGE)
+                {
+                    // must return inside, since you ever enter in this block, nEntry = MIN
+                    leaf_ptr left_leaf = static_cast<leaf_ptr>(fetch_node(child_leaf->get_left_leaf()));
+                    left_leaf->page_write_lock();
+
+                    // merge into left_leaf
+                    merge_leaf(node, index - 1, left_leaf, child_leaf);
+
+                    uint32_t erase_return = erase_from_leaf(left_leaf, kEntry);
+
+                    left_leaf->page_write_unlock();
+                    left_leaf->unref();
+                    child->page_write_unlock();
+                    node->page_write_unlock();
+
+                    return erase_return;
+                }
+                // try to merge from right
+                if (index != node->nEntry_
+                    && child_leaf->get_right_leaf() != NOT_A_PAGE)
+                {
+                    // must return inside, since you ever enter in this block, nEntry = MIN
+                    leaf_ptr right_leaf = static_cast<leaf_ptr>(fetch_node(child_leaf->get_right_leaf()));
+                    right_leaf->page_write_lock();
+
+                    // merge into child_leaf
+                    merge_leaf(node, index, child_leaf, right_leaf);
+
+                    uint32_t erase_return = erase_from_leaf(child_leaf, kEntry);
+
+                    right_leaf->page_write_unlock();
+                    right_leaf->unref();
+                    child->page_write_unlock();
+                    node->page_write_unlock();
+
+                    return erase_return;
+                }
+
+                debug::ERROR_LOG("`BTree::ERASE_NONMIN()` no steal/merge from left/right");
+
+            } // end b. child.nEntry = MIN_KEY
+
+
+        } // end I. child is LEAF
+
+
+        // II. child is INTERNAL
+        else
+        {
+            link_ptr child_link = static_cast<link_ptr>(child);
+
+            // a. child.nEntry > MIN_KEY
+            if (child_link->nEntry_ > MIN_KEY_SIZE)
+            {
+                // find K_index, such that child.key[K_index] <= kEntry
+                // recusively go down.
+                node->page_write_unlock();
+                node->page_read_lock();
+
+                uint32_t K_index = 0;
+                for (; K_index < child_link->nEntry_; K_index++)
+                    if (key_compare(kEntry, child_link, K_index) <= 0)
+                        break;
+                base_ptr child_child = fetch_node(child_link->branch_[K_index]);
+                // hold child write-lock
+                uint32_t erase_return = ERASE_NONMIN(child_link, K_index, child_child, kEntry);
+                child_child->unref();
+
+                node->page_read_unlock();
+
+                return erase_return;
+
+            } // end a. child.nEntry > MIN_KEY
+
+
+            // b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
+            else
+            {
+                link_ptr R = static_cast<link_ptr>(fetch_node(node->branch_[index + 1]));
+                R->page_write_lock();
+
+                // 1) R.nEntry > MIN_KEY
+                if (R->nEntry_ > MIN_KEY_SIZE)
+                {
+                    // *steal* R.key[0] and R.branch[0] to child.
+                    // set node.key[index] = R.key[0]
+                    // find K_index, recusively go down.
+
+                    // steal
+                    KeyEntry kEntry_steal = R->read_key(0);
+                    child_link->insert_key(child_link->nEntry_, kEntry_steal);
+                    child_link->branch_[child_link->nEntry_ + 1] = R->branch_[0];
+                    R->erase_key(0);
+                    child_link->nEntry_++;
+                    child_link->set_dirty();
+
+                    // R shift left
+                    R->nEntry_--;
+                    for (uint32_t i = 0; i < R->nEntry_; i++)
+                    {
+                        R->keys_[i] = R->keys_[i + 1];
+                        R->branch_[i] = R->branch_[i + 1];
+                    }
+                    R->branch_[R->nEntry_] = R->branch_[R->nEntry_ + 1];
+                    R->set_dirty();
+
+                    R->page_write_unlock();
+                    R->unref();
+
+                    // set node.k[index]
+                    kEntry_steal = max_KeyEntry(child_link->branch_[child_link->nEntry_]);
+                    node->erase_key(index);
+                    node->insert_key(index, kEntry_steal);
+                    node->set_dirty();
+
+                    // find K_index, recusively go down.
+
+                    node->page_write_unlock();
+                    node->page_read_lock();
+
+                    uint32_t K_index = 0;
+                    for (; K_index < child_link->nEntry_; K_index++)
+                        if (key_compare(kEntry, child_link, K_index) <= 0)
+                            break;
+                    base_ptr child_child = fetch_node(child_link->branch_[K_index]);
+                    // hold child write-lock
+                    uint32_t erase_return = ERASE_NONMIN(child_link, K_index, child_child, kEntry);
+                    child_child->unref();
+
+                    node->page_read_unlock();
+
+                    return erase_return;
+
+                } // end 1) R.nEntry > MIN_KEY
+
+
+                // 2) R.nEntry = MIN_KEY
+                else
+                {
+                    // *merge* child and R into child.
+                    //     move R.key[0..6] -> child.key[8..14]
+                    //     move noed.key[index] -> child.key[7]
+                    //     adjust node.key and node.branch
+                    // find K_index, recusively go down.
+
+                    merge_internal(node, index, child_link, R);
+
+                    R->page_write_unlock();
+                    R->unref();
+
+                    node->page_write_unlock();
+                    node->page_read_lock();
+
+                    uint32_t K_index = 0;
+                    for (; K_index < child_link->nEntry_; K_index++)
+                        if (key_compare(kEntry, child_link, K_index) <= 0)
+                            break;
+                    base_ptr child_child = fetch_node(child_link->branch_[K_index]);
+                    // hold child write-lock
+                    uint32_t erase_return = ERASE_NONMIN(child_link, K_index, child_child, kEntry);
+                    child_child->unref();
+
+                    node->page_read_unlock();
+
+                    return erase_return;
+
+                } // end 2) R.nEntry = MIN_KEY
+
+
+            } // end b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
+
+
+        } // end II. child is INTERNAL
+
+
+    } // end function `BTree::ERASE_NONMIN()`
 
 
     // return:
@@ -1035,12 +1505,10 @@ namespace DB::tree
     // > 0, if KeyEntry > keys[index]
     int32_t BTree::key_compare(const KeyEntry& kEntry, const base_ptr node, uint32_t key_index) const
     {
-        if (key_t_ == key_t_t::INTEGER)
-        {
+        if (key_t_ == key_t_t::INTEGER) {
             return kEntry.key_int - node->keys_[key_index];
         }
-        else
-        {
+        else {
             const KeyEntry key = node->read_key(key_index);
             return kEntry.key_str.compare(key.key_str);
         }
