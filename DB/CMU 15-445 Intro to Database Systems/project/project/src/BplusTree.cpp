@@ -129,7 +129,7 @@ namespace DB::tree
       //              1. directly delete if exists.
       //          II. root is ROOT_INTERNAL
       //              1.  a. root.nEntry = 1, call it (the founded one) as child.
-      //                     1) child is LEAF
+      //                     1) child is LEAF (remember to release root write-locks)
       //                          1. child.nEntry > MIN_KEY, directly delete. (return)
       //                          2. child.nEntry = MIN_KEY
       //                              1] other-child.nEntry > MIN_KEY
@@ -194,7 +194,7 @@ namespace DB::tree
                 bool child_L = true;
                 base_ptr child, other_child;
                 if (key_compare(kEntry, root, 0) <= 0) {
-                    child = fetch_node(root->branch_[0]); // TODO: unref();
+                    child = fetch_node(root->branch_[0]);
                     other_child = fetch_node(root->branch_[1]);
                 }
                 else {
@@ -205,12 +205,11 @@ namespace DB::tree
                 child->page_write_lock();
 
 
-                // 1) child is LEAF
+                // 1) child is LEAF (remember to release root write-locks)
                 if (child->get_page_t() == page_t_t::LEAF)
                 {
                     leaf_ptr child_leaf = static_cast<leaf_ptr>(child);
                     leaf_ptr other_child_leaf = static_cast<leaf_ptr>(other_child);
-
 
                     // 1. child.nEntry > MIN_KEY, directly delete. (return)
                     if (child_leaf->nEntry_ > MIN_KEY_SIZE)
@@ -313,13 +312,15 @@ namespace DB::tree
                                     other_child_leaf->erase_value(L_nEntry - 1);
                                     other_child_leaf->nEntry_--;
 
-                                } // end steal from left.k-v[MIN_KEY_SIZE-1]
+                                } // end steal from left.k-v[nEntry-1]
 
                                 other_child_leaf->set_dirty();
                                 child_leaf->set_dirty();
-                            }
+
+                            } // end steal 1 k-v from other-child
 
                         } // end other-child.nEntry > MIN_KEY
+
 
                         // 2] other-child.nEntry = MIN_KEY
                         else
@@ -328,37 +329,233 @@ namespace DB::tree
                             // change root to ROOT_LEAF.
                             // steal the 2 childs' k-v.
                             // delete 2 childs.
-                            // TODO:
+                            leaf_ptr L, R;
+                            if (child_L) {
+                                L = child_leaf;
+                                R = other_child_leaf;
+                            }
+                            else {
+                                L = other_child_leaf;
+                                R = child_leaf;
+                            }
 
+                            root->page_t_ = page_t_t::ROOT_LEAF;
 
+                            // delete root.k[0]
+                            root->erase_key(0);
 
+                            // L.k-v[0..6] to root.k-v[0..6], R.k-v[0..6] to root.k-v[7-13]
+                            KeyEntry kEntry;
+                            ValueEntry vEntry;
+                            for (uint32_t index = 0; index < MIN_KEY_SIZE; index++)
+                            {
+                                kEntry = L->read_key(index);
+                                L->read_value(index, vEntry);
+                                root->insert_key(index, kEntry);
+                                root->insert_value(index, vEntry);
+                                L->erase_key(index);    // maybe ununsed
+                                L->erase_value(index);  // maybe ununsed
 
-                        } // end other-child.nEntry = MIN_KEY
+                                kEntry = R->read_key(index);
+                                R->read_value(index, vEntry);
+                                root->insert_key(index + MIN_KEY_SIZE, kEntry);
+                                root->insert_value(index + MIN_KEY_SIZE, vEntry);
+                                R->erase_key(index);    // maybe ununsed
+                                R->erase_value(index);  // maybe ununsed
+                            }
+
+                            root->nEntry_ = MIN_KEY_SIZE << 1;
+
+                            // directly delete
+                            uint32_t K_index = 0;
+                            for (; K_index < root->nEntry_; K_index++)
+                                if (key_compare(kEntry, root, K_index) == 0)
+                                    break;
+                            if (K_index == root->nEntry_)
+                                erase_return = ERASE_NOTHING;
+                            else
+                            {
+                                erase_return = ERASE_KV;
+                                root->erase_key(K_index);
+                                root->erase_value(K_index);
+                                root->nEntry_--;
+                                for (uint32_t i = K_index; i < root->nEntry_; i++)
+                                {
+                                    root->keys_[i] = root->keys_[i + 1];
+                                    root->values_[i] = root->values_[i + 1];
+                                }
+                            }
+
+                            // UNDONE: how to delete the page??? GC ???
+                            L->set_dirty();
+                            R->set_dirty();
+
+                        } // end other-child.nEntry = MIN_KEY (aka. merge to ROOT_LEAF)
 
                         other_child->page_write_unlock();
 
                     } // end child.nEntry = MIN_KEY
 
                     child->page_write_unlock();
-                    root->page_write_unlock();
+                    root_->page_write_unlock();
 
-                } // end child is LEAF
+                } // end child is LEAF (remember to release root write-locks)
 
 
                 // 2) child is INTERNAL
                 else
                 {
-                    // TODO:
-
+                    link_ptr child_link = static_cast<link_ptr>(child);
+                    link_ptr other_child_link = static_cast<link_ptr>(other_child);
 
                     // 1. child.nEntry > MIN_KEY
-                    //     find K_index, recusively go down (from child).
+                    if (child_link->nEntry_ > MIN_KEY_SIZE)
+                    {
+                        // find K_index, recusively go down (from child).
+                        uint32_t K_index = 0;
+                        for (; K_index < child_link->nEntry_; K_index++)
+                            if (key_compare(kEntry, child_link, K_index) <= 0)
+                                break;
+                        base_ptr child_child = fetch_node(child_link->branch_[K_index]);
+                        erase_return = ERASE_NONMIN(child, K_index, child_child, kEntry);
+                        child_child->unref();
+
+                    } // end child.nEntry > MIN_KEY
+
+
                     // 2. child.nEntry = MIN_KEY
-                    //     1] other-child.nEntry > MIN_KEY
-                    //         *steal* one key/branch
-                    //     2] other-child.nEntry = MIN_KEY
-                    //         *merge* 2 childs into root.
-                }
+                    else
+                    {
+                        other_child_link->page_write_lock();
+
+                        // 1] other-child.nEntry > MIN_KEY
+                        if (other_child_link->nEntry_ > MIN_KEY_SIZE)
+                        {
+                            // *steal* one key/branch
+
+                            // child is left, steal right.k-br[0]
+                            if (child_L)
+                            {
+                                link_ptr L = child_link, R = other_child_link;
+
+                                KeyEntry kEntry_steal = R->read_key(0);
+                                L->insert_key(MIN_KEY_SIZE, kEntry_steal);
+                                L->nEntry_++;
+                                L->branch_[L->nEntry_] = R->branch_[0];
+
+                                // shift left
+                                R->erase_key(0);
+                                R->nEntry_--;
+                                for (uint32_t i = 0; i < R->nEntry_; i++)
+                                {
+                                    R->keys_[i] = R->keys_[i + 1];
+                                    R->branch_[i] = R->branch_[i + 1];
+                                }
+                                R->branch_[R->nEntry_] = R->branch_[R->nEntry_ + 1];
+
+                            } // end child is left, steal right.k-br[0]
+
+                            // child is right, steal left.k[nEntry-1], br[nEntry]
+                            else
+                            {
+                                link_ptr L = other_child_link, R = child_link;
+
+                                // shift right
+                                R->nEntry_++;
+                                R->branch_[R->nEntry_] = R->branch_[R->nEntry_ - 1];
+                                for (uint32_t i = R->nEntry_ - 1; i > 0; i--)
+                                {
+                                    R->keys_[i] = R->keys_[i - 1];
+                                    R->branch_[i] = R->branch_[i - 1];
+                                }
+
+                                // steal left.k[nEntry-1], br[nEntry]
+                                KeyEntry kEntry_steal = L->read_key(L->nEntry_ - 1);
+                                R->insert_key(0, kEntry_steal);
+                                R->branch_[0] = L->branch_[L->nEntry_];
+                                L->erase_key(L->nEntry_ - 1);
+                                L->nEntry_--;
+
+                                L->set_dirty();
+                                R->set_dirty();
+
+                            } // end child is right, steal left.k[nEntry-1], br[nEntry]
+
+                            // hold child write-lock
+                            other_child->page_write_unlock();
+
+                            // find K_index, recusively go down.
+                            uint32_t K_index = 0;
+                            for (; K_index < child_link->nEntry_; K_index++)
+                                if (key_compare(kEntry, child_link, K_index) <= 0)
+                                    break;
+                            base_ptr child_child = fetch_node(child_link->branch_[K_index]);
+                            erase_return = ERASE_NONMIN(child, K_index, child_child, kEntry);
+                            child_child->unref();
+
+                        } // end other-child.nEntry > MIN_KEY
+
+
+                        // 2] other-child.nEntry = MIN_KEY
+                        else
+                        {
+                            // *merge* 2 childs into root.
+                            link_ptr L, R;
+                            if (child_L) {
+                                L = child_link;
+                                R = other_child_link;
+                            }
+                            else {
+                                L = other_child_link;
+                                R = child_link;
+                            }
+
+                            // move root.k[0] to root.k[7]
+                            root_->keys_[KEY_MIDEIUM] = root->keys_[0];
+
+                            // move L.k[0..6] into root.k[0..6], L.br[0..7] into root.br[0..7]
+                            KeyEntry keyEntry_merge;
+                            for (uint32_t i = 0; i < KEY_MIDEIUM; i++)
+                            {
+                                keyEntry_merge = L->read_key(i);
+                                root->insert_key(i, keyEntry_merge);
+                                L->erase_key(i);
+                                root->branch_[i] = L->branch_[i];
+                            }
+                            root->branch_[KEY_MIDEIUM] = L->branch_[KEY_MIDEIUM];
+
+                            // move R.k[0..6] into root.k[8..14], R.br[0..7] into root.br[8..15]
+                            for (uint32_t i = 0; i < KEY_MIDEIUM; i++)
+                            {
+                                keyEntry_merge = R->read_key(i);
+                                root->insert_key(i + KEY_MIDEIUM + 1, keyEntry_merge);
+                                R->erase_key(i);
+                                root->branch_[i + KEY_MIDEIUM + 1] = R->branch_[i];
+                            }
+                            root->branch_[MAX_KEY_SIZE] = R->branch_[MAX_KEY_SIZE];
+
+                            root->nEntry_ = MAX_KEY_SIZE;
+
+                            // how to delete ???
+                            child->page_write_unlock();
+                            other_child->page_write_unlock();
+
+                            // find K_index, recusively go down.
+                            uint32_t K_index = 0;
+                            for (; K_index < root->nEntry_; K_index++)
+                                if (key_compare(kEntry, root, K_index) <= 0)
+                                    break;
+                            base_ptr root_child = fetch_node(root->branch_[K_index]);
+                            // hold root write-lock
+                            erase_return = ERASE_NONMIN(root, K_index, root_child, kEntry);
+                            root_child->unref();
+
+                        } // end other-child.nEntry = MIN_KEY
+
+
+                    } // end child.nEntry = MIN_KEY
+
+                } // end child is INTERNAL
 
                 child->unref();
                 other_child->unref();
@@ -374,6 +571,7 @@ namespace DB::tree
                     if (key_compare(kEntry, root, K_index) <= 0)
                         break;
                 base_ptr root_child = fetch_node(root->branch_[K_index]);
+                // hold root write-lock
                 erase_return = ERASE_NONMIN(root, K_index, root_child, kEntry);
                 root_child->unref();
             }

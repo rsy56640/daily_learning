@@ -84,7 +84,7 @@ namespace DB::tree
         //              1. directly delete if exists.
         //          II. root is ROOT_INTERNAL
         //              1.  a. root.nEntry = 1, call it (the founded one) as child.
-        //                     1) child is LEAF
+        //                     1) child is LEAF (remember to release root write-locks)
         //                          1. child.nEntry > MIN_KEY, directly delete. (return)
         //                          2. child.nEntry = MIN_KEY
         //                              1] other-child.nEntry > MIN_KEY
