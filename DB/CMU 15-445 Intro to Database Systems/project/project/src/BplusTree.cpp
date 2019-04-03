@@ -34,14 +34,18 @@ namespace DB::tree
         ValueEntry vEntry;
         BTree::SearchInfo info;
         search(kEntry, info);
-        leaf_ptr leaf = static_cast<leaf_ptr>(buffer_pool_->FetchPage(info.leaf_id));
-        leaf->page_read_lock();
-        if (info.leaf_id == NOT_A_PAGE || key_compare(kEntry, leaf, info.key_index) != 0)
-            vEntry.value_state_ = value_state::OBSOLETE;
-        else
+        if (info.leaf_id == NOT_A_PAGE)
+            return vEntry;
+        if (info.leaf_id != root_->get_page_id()) {
+            leaf_ptr leaf = static_cast<leaf_ptr>(buffer_pool_->FetchPage(info.leaf_id));
+            leaf->page_read_lock();
             leaf->read_value(info.key_index, vEntry);
-        leaf->page_read_unlock();
-        leaf->unref();
+            leaf->page_read_unlock();
+            leaf->unref();
+        }
+        else {
+            static_cast<root_ptr>(root_)->read_value(info.key_index, vEntry);
+        }
         return vEntry;
     }
 
@@ -666,6 +670,7 @@ namespace DB::tree
             info.value_page_id = NOT_A_PAGE;
             root_ = allocate_node(info);
             root_->set_dirty();
+            debug::DEBUG_LOG("init root_id = %d\n", root_->get_page_id());
         }
         else
         {
@@ -680,6 +685,7 @@ namespace DB::tree
     {
         info.leaf_id = NOT_A_PAGE;
         if (size_ == 0) return;
+        this->debug_page(root_->get_page_id());
         root_->page_read_lock();
         doSearch(root_, kEntry, info);
         root_->page_read_unlock();
@@ -695,11 +701,12 @@ namespace DB::tree
                 break;
 
         // now (kEntry <= key[index]) or (index == n)
-        if (index == node->nEntry_)
+        if (index == node->nEntry_ && node->get_page_t() == page_t_t::LEAF)
             return; // all key < kEntry, so no result.
 
         // if at Leaf
-        if (node->get_page_t() == page_t_t::LEAF)
+        if (node->get_page_t() == page_t_t::LEAF
+            || node->get_page_t() == page_t_t::ROOT_LEAF)
         {
             if (key_compare(kEntry, node, index) == 0) {
                 info.leaf_id = node->get_page_id();
@@ -1587,6 +1594,12 @@ namespace DB::tree
 
 
     } // end function `BTree::ERASE_NONMIN()`
+
+
+
+    void BTree::debug_page(page_id_t page_id) const {
+        debug::debug_page(page_id, this->buffer_pool_);
+    }
 
 
     // return:

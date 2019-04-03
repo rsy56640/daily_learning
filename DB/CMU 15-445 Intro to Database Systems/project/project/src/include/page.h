@@ -54,7 +54,6 @@ namespace DB::page
 
 
     class BTreePage;
-
     // NB: whenever someone holds the Page*, the Page* must be `ref()` before!!!
     class Page
     {
@@ -72,6 +71,10 @@ namespace DB::page
         page_t_t get_page_t() const noexcept;
 
         page_id_t get_page_id() const noexcept;
+
+        page_id_t get_parent_id() const noexcept;
+
+        uint32_t get_nEntry() const noexcept;
 
         char* get_data() noexcept;
 
@@ -215,7 +218,7 @@ namespace DB::page
         // update the all metadata into memory, for the later `flush()`.
         virtual void update_data();
 
-    private:
+    public:
         page_id_t * branch_;     // nEntry + 1
 
     }; // end class InternalPage
@@ -292,7 +295,7 @@ namespace DB::page
         // update the all metadata into memory, for the later `flush()`.
         virtual void update_data();
 
-    private:
+    public:
         ValuePage * value_page_;
         page_id_t value_page_id_;
         page_id_t previous_page_id_, next_page_id_;

@@ -1,4 +1,5 @@
 #include "include/hash_lru.h"
+#include "include/debug_log.h"
 
 namespace DB::buffer
 {
@@ -181,7 +182,7 @@ namespace DB::buffer
             _page_handle = page_list.find_handle(page_id);
 
             // return if no such page.
-            if (_page_handle->page_ == nullptr)
+            if (_page_handle == nullptr)
                 return nullptr;
 
             page_ptr = _page_handle->page_;
@@ -385,6 +386,11 @@ namespace DB::buffer
                 page_list.remove(victim);
 
             victim->unref(); // `unref` for LRU
+        }
+
+        {
+            std::string msg = "`Hash_LRU::lru_evict()` evict: " + std::to_string(page_id);
+            debug::DEBUG_LOG(msg.c_str());
         }
 
     } // end function `void Hash_LRU::lru_evict()`

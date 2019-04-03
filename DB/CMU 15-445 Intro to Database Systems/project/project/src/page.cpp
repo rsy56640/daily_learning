@@ -43,13 +43,15 @@ namespace DB::page
     }
 
     void Page::unref() {
+        debug::DEBUG_LOG("page_id %d ref %d -> %d\n",
+            this->get_page_id(), ref_count_.load(), ref_count_.load() - 1);
         if (--ref_count_ == 0) {
             if (dirty_) {
                 this->update_data();
                 flush();
             }
+            delete this;
         }
-        delete this;
     }
 
     page_t_t Page::get_page_t() const noexcept {
@@ -58,6 +60,14 @@ namespace DB::page
 
     page_id_t Page::get_page_id() const noexcept {
         return page_id_;
+    }
+
+    page_id_t Page::get_parent_id() const noexcept {
+        return parent_id_;
+    }
+
+    uint32_t Page::get_nEntry() const noexcept {
+        return nEntry_;
     }
 
     char* Page::get_data() noexcept {
@@ -79,21 +89,39 @@ namespace DB::page
     }
 
     bool Page::try_page_read_lock() {
+#ifdef SIMPLE_TEST
+        return true;
+#endif // SIMPLE_TEST
         return rw_page_mutex_.try_lock_shared();
     }
     bool Page::try_page_write_lock() {
+#ifdef SIMPLE_TEST
+        return true;
+#endif // SIMPLE_TEST
         return rw_page_mutex_.try_lock();
     }
     void Page::page_read_lock() {
+#ifdef SIMPLE_TEST
+        return;
+#endif // SIMPLE_TEST
         while (!(try_page_read_lock()));
     }
     void Page::page_write_lock() {
+#ifdef SIMPLE_TEST
+        return;
+#endif // SIMPLE_TEST
         while (!(try_page_write_lock()));
     }
     void Page::page_read_unlock() {
+#ifdef SIMPLE_TEST
+        return;
+#endif // SIMPLE_TEST
         rw_page_mutex_.unlock_shared();
     }
     void Page::page_write_unlock() {
+#ifdef SIMPLE_TEST
+        return;
+#endif // SIMPLE_TEST
         rw_page_mutex_.unlock();
     }
 
@@ -295,6 +323,8 @@ namespace DB::page
         :BTreePage(page_t_t::LEAF, page_id, parent_id, nEntry,
             disk_manager, key_t, str_len, isInit), value_page_id_(value_page_id)
     {
+        values_ = new uint32_t[BTNodeKeySize];
+        std::memset(values_, 0, BTNodeKeySize * sizeof(uint32_t));
         if (isInit) // new
         {
             PageInitInfo info;
@@ -316,6 +346,7 @@ namespace DB::page
 
     LeafPage::~LeafPage() {
         value_page_->unref(); // ref 1->0
+        delete[] values_;
     }
 
     void LeafPage::read_value(uint32_t index, ValueEntry& vEntry) const
@@ -361,6 +392,8 @@ namespace DB::page
         :InternalPage(page_t, page_id, parent_id, nEntry,
             disk_manager, key_t, str_len, isInit), value_page_id_(value_page_id)
     {
+        values_ = new uint32_t[BTNodeKeySize];
+        std::memset(values_, 0, BTNodeKeySize * sizeof(uint32_t));
         if (isInit) // new
         {
             PageInitInfo info;
@@ -383,6 +416,7 @@ namespace DB::page
 
     RootPage::~RootPage() {
         value_page_->unref(); // ref 1->0
+        delete[] values_;
     }
 
     void RootPage::read_value(uint32_t index, ValueEntry& vEntry) const
@@ -411,5 +445,9 @@ namespace DB::page
     page_id_t RootPage::get_left_leaf() const { return previous_page_id_; }
     page_id_t RootPage::get_right_leaf() const { return next_page_id_; }
 
+    void RootPage::update_data()
+    {
+        // TODO: RootPage::update_data();
+    }
 
 } // end namespace DB::page

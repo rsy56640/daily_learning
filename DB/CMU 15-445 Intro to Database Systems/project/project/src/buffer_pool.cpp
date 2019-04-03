@@ -21,9 +21,11 @@ namespace DB::buffer
         //       to avoid accessing the same page at the same time.
         //       But what if the page is evicted and accessed again in the same txn???
         // TODO: in the worst case, the handling of the same page should be serialized.
-        if (page_id = NOT_A_PAGE) return nullptr;
+        debug::DEBUG_LOG("BufferPoolManager::FetchPage() fetch %d\n", page_id);
+        if (page_id == NOT_A_PAGE) return nullptr;
         Page* page_ptr = hash_lru_.find(page_id);
         if (page_ptr != nullptr) return page_ptr;
+        debug::DEBUG_LOG("BufferPoolManager::FetchPage() does not fetch, read page %d\n", page_id);
         char buffer[page::PAGE_SIZE];
         disk_manager_->ReadPage(page_id, buffer);
         page_ptr = buffer_to_page(buffer);
@@ -34,6 +36,7 @@ namespace DB::buffer
 
 
     bool BufferPoolManager::FlushPage(page_id_t page_id) {
+        debug::DEBUG_LOG("BufferPoolManager::FlushPage() %d\n", page_id);
         Page* page_ptr = hash_lru_.find(page_id, false); // `false` means no update lru.
         if (page_ptr == nullptr) return false;
         disk_manager_->WritePage(page_ptr->get_page_id(), page_ptr->get_data());
@@ -43,6 +46,7 @@ namespace DB::buffer
 
 
     Page* BufferPoolManager::NewPage(PageInitInfo info) {
+
         const page_id_t page_id = disk_manager_->AllocatePage();
         Page* page_ptr;
         switch (info.page_t)
@@ -81,6 +85,7 @@ namespace DB::buffer
 
 
     bool BufferPoolManager::DeletePage(page_id_t page_id) {
+        debug::DEBUG_LOG("BufferPoolManager::DeletePage() %d\n", page_id);
         return hash_lru_.erase(page_id);
     }
 

@@ -265,6 +265,8 @@ namespace DB::tree
         uint32_t ERASE_NONMIN(link_ptr node, uint32_t index, base_ptr child, const KeyEntry&);
 
 
+        void debug_page(page_id_t) const;
+
     private:
         vm::StorageEngine * storage_engine_;
         buffer::BufferPoolManager* buffer_pool_; // this is in StorageEngine, here for convenience
