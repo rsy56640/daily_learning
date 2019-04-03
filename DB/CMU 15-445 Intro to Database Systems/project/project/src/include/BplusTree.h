@@ -23,6 +23,13 @@ namespace DB::tree
     };
 
 
+    // return:
+    // < 0, if KeyEntry < keys[index]
+    // = 0, if KeyEntry = keys[index]
+    // > 0, if KeyEntry > keys[index]
+    int32_t key_compare(const KeyEntry&, const BTreePage*, uint32_t key_index);
+
+
     constexpr uint32_t MIN_KEY_SIZE = BTdegree - 1;         // 7
     constexpr uint32_t MAX_KEY_SIZE = BTNodeKeySize;        // 15
     constexpr uint32_t MIN_BRANCH_SIZE = BTdegree;          // 8
@@ -199,13 +206,19 @@ namespace DB::tree
         KeyEntry max_KeyEntry(page_id_t);
 
 
-        // all write-lock held
-        //
+        // all write-lock held, L.nEntry = R.nEtnry = KEY_MIN_SIZE
+        // move R into L.
+        //     move R.key[0..6] -> L.key[8..14], R.br[0..7] -> L.br[..15]
+        //     move node.key[index] -> L.key[7]
+        //     adjust node.key and node.branch
         void merge_internal(link_ptr node, uint32_t merge_index, link_ptr L, link_ptr R);
 
 
-        // all write-lock held
+        // all write-lock held, L.nEntry = R.nEtnry = KEY_MIN_SIZE
         // move R into L, erase node.k[index], node.br[index+1]
+        //     move R.k-v[0..6] -> L.k-v[7.13], adjust relation
+        //     erase node.k[index], node.br[index+1]
+        //     adjust node.key and node.branch
         void merge_leaf(link_ptr node, uint32_t merge_index, leaf_ptr L, leaf_ptr R);
 
 
@@ -250,13 +263,6 @@ namespace DB::tree
         //                              adjust node.key and node.branch
         //                          find K_index, recusively go down.
         uint32_t ERASE_NONMIN(link_ptr node, uint32_t index, base_ptr child, const KeyEntry&);
-
-
-        // return:
-        // < 0, if KeyEntry < keys[index]
-        // = 0, if KeyEntry = keys[index]
-        // > 0, if KeyEntry > keys[index]
-        int32_t key_compare(const KeyEntry&, const base_ptr, uint32_t key_index) const;
 
 
     private:

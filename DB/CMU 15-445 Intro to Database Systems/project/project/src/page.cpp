@@ -158,6 +158,9 @@ namespace DB::page
         delete[] keys_;
     }
 
+    key_t_t BTreePage::get_key_t() const noexcept { return key_t_; }
+    uint32_t BTreePage::get_str_len() const noexcept { return str_len_; }
+
 
     void BTreePage::insert_key(uint32_t index, const KeyEntry& kEntry)
     {
@@ -234,6 +237,7 @@ namespace DB::page
     }
 
 
+
     //
     // ValuePage
     //
@@ -291,11 +295,11 @@ namespace DB::page
         :BTreePage(page_t_t::LEAF, page_id, parent_id, nEntry,
             disk_manager, key_t, str_len, isInit), value_page_id_(value_page_id)
     {
-        PageInitInfo info;
-        info.page_t = page_t_t::VALUE;
-        info.parent_id = this->get_page_id();
         if (isInit) // new
         {
+            PageInitInfo info;
+            info.page_t = page_t_t::VALUE;
+            info.parent_id = this->get_page_id();
             value_page_ = static_cast<ValuePage*>(buffer_pool->NewPage(info));
             value_page_id_ = value_page_->get_page_id();
             buffer_pool->DeletePage(value_page_id_);
@@ -344,6 +348,68 @@ namespace DB::page
     {
         // TODO: LeafPage::update_data();
     }
+
+
+
+    //
+    // RootPage
+    //
+    //(buffer::BufferPoolManager*, page_t_t, page_id_t parent_id, page_id_t,
+    //uint32_t nEntry, disk::DiskManager*, key_t_t, uint32_t str_len, page_id_t value_page_id, bool isInit);
+    RootPage::RootPage(buffer::BufferPoolManager* buffer_pool, page_t_t page_t, page_id_t page_id, page_id_t parent_id, uint32_t nEntry,
+        disk::DiskManager* disk_manager, key_t_t key_t, uint32_t str_len, page_id_t value_page_id, bool isInit)
+        :InternalPage(page_t, page_id, parent_id, nEntry,
+            disk_manager, key_t, str_len, isInit), value_page_id_(value_page_id)
+    {
+        if (isInit) // new
+        {
+            PageInitInfo info;
+            info.page_t = page_t_t::VALUE;
+            info.parent_id = this->get_page_id();
+            value_page_ = static_cast<ValuePage*>(buffer_pool->NewPage(info));
+            value_page_id_ = value_page_->get_page_id();
+            buffer_pool->DeletePage(value_page_id_);
+            // now value_page has excatly *** 1 ref count ***.
+            write_int(data_ + offset::VALUE_PAGE_ID, value_page_id_);
+            value_page_->set_dirty();
+        }
+        else // exist
+        {
+            value_page_ = static_cast<ValuePage*>(buffer_pool->FetchPage(value_page_id_));
+            buffer_pool->DeletePage(value_page_id_);
+            // now value_page has excatly *** 1 ref count ***.
+        }
+    }
+
+    RootPage::~RootPage() {
+        value_page_->unref(); // ref 1->0
+    }
+
+    void RootPage::read_value(uint32_t index, ValueEntry& vEntry) const
+    {
+        value_page_->read_content(values_[index], vEntry);
+        if (vEntry.value_state_ != value_state::INUSED)
+            debug::ERROR_LOG("`RootPage::read_value()` read corrupted value.");
+    }
+
+    void RootPage::insert_value(uint32_t index, const ValueEntry& vEntry)
+    {
+        values_[index] = value_page_->write_content(vEntry);
+        dirty_ = true;
+    }
+
+    void RootPage::erase_value(uint32_t index) {
+        value_page_->erase_block(values_[index]);
+    }
+
+    void RootPage::update_value(uint32_t index, const ValueEntry& vEntry) {
+        value_page_->update_content(values_[index], vEntry);
+    }
+
+    void RootPage::set_left_leaf(page_id_t previous_page_id) { previous_page_id_ = previous_page_id; }
+    void RootPage::set_right_leaf(page_id_t next_page_id) { next_page_id_ = next_page_id; }
+    page_id_t RootPage::get_left_leaf() const { return previous_page_id_; }
+    page_id_t RootPage::get_right_leaf() const { return next_page_id_; }
 
 
 } // end namespace DB::page

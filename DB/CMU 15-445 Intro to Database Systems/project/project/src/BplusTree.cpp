@@ -1090,23 +1090,113 @@ namespace DB::tree
     // return the maximum KeyEntry in the tree from page_id.
     KeyEntry BTree::max_KeyEntry(page_id_t page_id)
     {
-        // TODO: max_KeyEntry
-
-
+        KeyEntry ret;
+        base_ptr node = fetch_node(page_id);
+        node->page_read_lock();
+        if (node->get_page_t() != page_t_t::LEAF) {
+            // go right down
+            ret = max_KeyEntry(static_cast<link_ptr>(node)->branch_[node->nEntry_]);
+        }
+        else {
+            leaf_ptr leaf = static_cast<leaf_ptr>(node);
+            ret = leaf->read_key(leaf->nEntry_ - 1);
+        }
+        node->page_read_unlock();
+        node->unref();
+        return ret;
     }
 
 
+    // all write-lock held, L.nEntry = R.nEtnry = KEY_MIN_SIZE
+    // move R into L.
+    //     move R.key[0..6] -> L.key[8..14], R.br[0..7] -> L.br[..15]
+    //     move node.key[index] -> L.key[7]
+    //     adjust node.key and node.branch
     void BTree::merge_internal(link_ptr node, uint32_t merge_index, link_ptr L, link_ptr R)
     {
-        // TODO: merge_internal()
+        // move R.key[0..6] -> L.key[8..14], R.br[0..7] -> L.br[8..15]
+        KeyEntry kEntry;
+        for (uint32_t R_index = 0; R_index < KEY_MIDEIUM; R_index++) // [0..6]
+        {
+            const uint32_t L_index = R_index + KEY_MIDEIUM + 1; // [8..14]
+            kEntry = R->read_key(R_index);
+            L->insert_key(L_index, kEntry);
+            R->erase_key(R_index);
+            L->branch_[L_index] = R->branch_[R_index];
+        }
+        L->branch_[MAX_KEY_SIZE] = R->branch_[KEY_MIDEIUM];
+        R->nEntry_ = 0;
+        R->set_dirty();
+
+        // move node.key[index] -> L.key[7]
+        kEntry = node->read_key(merge_index);
+        L->insert_key(KEY_MIDEIUM, kEntry);
+        L->nEntry_ = MAX_KEY_SIZE;
+        L->set_dirty();
+
+        // adjust node.key and node.branch
+        node->erase_key(merge_index);
+        node->nEntry_--;
+        for (uint32_t i = merge_index; i < node->nEntry_; i++)
+        {
+            node->keys_[i] = node->keys_[i + 1];
+            node->branch_[i + 1] = node->branch_[i + 2];
+        }
+        node->set_dirty();
+
     }
 
 
-    // all write-lock held
+    // all write-lock held, L.nEntry = R.nEtnry = KEY_MIN_SIZE
     // move R into L, erase node.k[index], node.br[index+1]
+    //     move R.k-v[0..6] -> L.k-v[7.13], adjust relation
+    //     erase node.k[index], node.br[index+1]
+    //     adjust node.key and node.branch
     void BTree::merge_leaf(link_ptr node, uint32_t merge_index, leaf_ptr L, leaf_ptr R)
     {
-        // TODO: merge_leaf()
+        // move R.k-v[0..6] -> L.k-v[7.13], adjust relation
+        KeyEntry kEntry;
+        ValueEntry vEntry;
+        for (uint32_t R_index = 0; R_index < KEY_MIDEIUM; R_index++) // [0..6]
+        {
+            const uint32_t L_index = R_index + KEY_MIDEIUM; // [7..13]
+            kEntry = R->read_key(R_index);
+            R->read_value(R_index, vEntry);
+            L->insert_key(L_index, kEntry);
+            L->insert_value(L_index, vEntry);
+            R->erase_key(R_index);
+            R->erase_value(R_index);
+        }
+        L->nEntry_ = KEY_MIDEIUM << 1;
+        R->nEntry_ = 0;
+
+        // adjust leaf-chain
+        const page_id_t next_leaf = R->get_right_leaf();
+        L->set_right_leaf(next_leaf);
+        if (next_leaf != NOT_A_PAGE) {
+            leaf_ptr right_leaf = static_cast<leaf_ptr>(fetch_node(next_leaf));
+            right_leaf->page_write_lock();
+            right_leaf->set_left_leaf(L->get_page_id());
+            right_leaf->set_dirty();
+            right_leaf->page_write_unlock();
+            right_leaf->unref();
+        }
+
+        L->set_dirty();
+        R->set_dirty();
+
+        // erase node.k[index], node.br[index+1]
+        node->erase_key(merge_index);
+
+        // adjust node.key and node.branch
+        node->nEntry_--;
+        for (uint32_t i = merge_index; i < node->nEntry_; i++)
+        {
+            node->keys_[i] = node->keys_[i + 1];
+            node->branch_[i + 1] = node->branch_[i + 2];
+        }
+        node->set_dirty();
+
     }
 
 
@@ -1503,9 +1593,8 @@ namespace DB::tree
     // < 0, if KeyEntry < keys[index]
     // = 0, if KeyEntry = keys[index]
     // > 0, if KeyEntry > keys[index]
-    int32_t BTree::key_compare(const KeyEntry& kEntry, const base_ptr node, uint32_t key_index) const
-    {
-        if (key_t_ == key_t_t::INTEGER) {
+    int32_t key_compare(const KeyEntry& kEntry, const BTreePage* node, uint32_t key_index) {
+        if (node->get_key_t() == key_t_t::INTEGER) {
             return kEntry.key_int - node->keys_[key_index];
         }
         else {

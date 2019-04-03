@@ -162,6 +162,9 @@ namespace DB::page
         friend class ::DB::tree::BTree;
     public:
 
+        key_t_t get_key_t() const noexcept;
+        uint32_t get_str_len() const noexcept;
+
         // insert key at `index`.
         void insert_key(uint32_t index, const KeyEntry&);
 
@@ -217,43 +220,6 @@ namespace DB::page
 
     }; // end class InternalPage
 
-
-    class RootPage :public InternalPage {
-        friend class ::DB::tree::BTree;
-        friend class BTreePage;
-    public:
-        RootPage(buffer::BufferPoolManager*, page_t_t, page_id_t parent_id, page_id_t,
-            uint32_t nEntry, disk::DiskManager*, key_t_t, uint32_t str_len, page_id_t value_page_id, bool isInit);
-        virtual ~RootPage();
-
-        // read the value record into ValueEntry
-        void read_value(uint32_t index, ValueEntry&) const;
-
-        // insert value at `index`.
-        void insert_value(uint32_t index, const ValueEntry&);
-
-        // erase value-str in value page corrsponding to keys[index].
-        void erase_value(uint32_t index);
-
-        // update value at `index`.
-        void update_value(uint32_t index, const ValueEntry&);
-
-        void set_left_leaf(page_id_t);
-        void set_right_leaf(page_id_t);
-        page_id_t get_left_leaf() const;
-        page_id_t get_right_leaf() const;
-
-        // update the all metadata into memory, for the later `flush()`.
-        virtual void update_data();
-
-    private:
-        // for ROOT_LEAF
-        ValuePage * value_page_;
-        page_id_t value_page_id_;
-        uint32_t* values_; // points to offset of the value-blocks.
-        page_id_t previous_page_id_, next_page_id_;
-
-    }; // end class RootPage
 
 
     // the ValuePage stores the corresponding value to the key in LeafPage.
@@ -333,6 +299,46 @@ namespace DB::page
         uint32_t* values_; // points to offset of the value-blocks.
 
     }; // end class LeafPage
+
+
+
+
+    class RootPage :public InternalPage {
+        friend class ::DB::tree::BTree;
+        friend class BTreePage;
+    public:
+        RootPage(buffer::BufferPoolManager*, page_t_t, page_id_t parent_id, page_id_t,
+            uint32_t nEntry, disk::DiskManager*, key_t_t, uint32_t str_len, page_id_t value_page_id, bool isInit);
+        virtual ~RootPage();
+
+        // read the value record into ValueEntry
+        void read_value(uint32_t index, ValueEntry&) const;
+
+        // insert value at `index`.
+        void insert_value(uint32_t index, const ValueEntry&);
+
+        // erase value-str in value page corrsponding to keys[index].
+        void erase_value(uint32_t index);
+
+        // update value at `index`.
+        void update_value(uint32_t index, const ValueEntry&);
+
+        void set_left_leaf(page_id_t);
+        void set_right_leaf(page_id_t);
+        page_id_t get_left_leaf() const;
+        page_id_t get_right_leaf() const;
+
+        // update the all metadata into memory, for the later `flush()`.
+        virtual void update_data();
+
+    private:
+        // for ROOT_LEAF
+        ValuePage * value_page_;
+        page_id_t value_page_id_;
+        uint32_t* values_; // points to offset of the value-blocks.
+        page_id_t previous_page_id_, next_page_id_;
+
+    }; // end class RootPage
 
 
 } // end namespace DB::page
