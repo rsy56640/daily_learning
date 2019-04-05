@@ -52,6 +52,9 @@ namespace DB::disk
     }
 
 
+    page_id_t DiskManager::get_cut_page_id() const { return cur_page_no_.load(); }
+
+
     void DiskManager::WritePage(page_id_t page_id, const char *page_data)
     {
         db_io_.seekp(page_id * PAGE_SIZE);

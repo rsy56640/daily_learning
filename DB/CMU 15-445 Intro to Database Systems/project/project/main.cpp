@@ -6,6 +6,7 @@
 int main()
 {
     test();
+    printf("--------------------------- main end ---------------------------\n");
     std::getchar();
     return 0;
 }

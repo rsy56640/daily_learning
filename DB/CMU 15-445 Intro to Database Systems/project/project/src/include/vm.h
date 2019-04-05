@@ -18,7 +18,7 @@ namespace DB::vm
     struct StorageEngine
     {
 
-        //disk::DiskManager* disk_manager_;
+        disk::DiskManager* disk_manager_;
         buffer::BufferPoolManager* buffer_pool_manager_;
         //log::LogManager* log_manager_;
         //LockManager* lock_manager_;

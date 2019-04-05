@@ -71,6 +71,11 @@ namespace DB::tree
         BTree& operator=(const BTree&) = delete;
         BTree& operator=(BTree&&) = delete;
 
+
+        void debug() const;
+        void debug_page(page_id_t) const;
+
+
         uint32_t size() const;
 
 
@@ -198,7 +203,8 @@ namespace DB::tree
         //              2. hold write-lock of node.br[index]
         //                 if need to split node.br[index], then split.
         //              3. release write-lock of node, then hold the read-lock of node.
-        //              4. recursively go down then release read-lock.
+        //              4. maybe update index and child=node.br[index] after split_leaf.
+        //              5. recursively go down then release read-lock.
         uint32_t INSERT_NONFULL(base_ptr node, const KVEntry&);
 
 
@@ -264,8 +270,6 @@ namespace DB::tree
         //                          find K_index, recusively go down.
         uint32_t ERASE_NONMIN(link_ptr node, uint32_t index, base_ptr child, const KeyEntry&);
 
-
-        void debug_page(page_id_t) const;
 
     private:
         vm::StorageEngine * storage_engine_;

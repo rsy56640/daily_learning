@@ -21,6 +21,8 @@ namespace DB::disk
         DiskManager(const std::string& file_name);
         ~DiskManager();
 
+        page_id_t get_cut_page_id() const;
+
         // no validation on `page_id`
         // the length of `page_data` should not surpass `PAGE_SIZE`
         void WritePage(page_id_t page_id, const char *page_data);

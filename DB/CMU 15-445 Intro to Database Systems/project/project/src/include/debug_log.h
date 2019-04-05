@@ -7,6 +7,8 @@
 namespace DB::debug
 {
 
+    static const char* debug_output = "./debug_output.txt";
+
     void ERROR_LOG(const char*);
     void DEBUG_LOG(const char*);
 

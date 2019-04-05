@@ -5,6 +5,9 @@
 #include "include/debug_log.h"
 #include <cstring>
 
+// UNDONE: read-write lock, does 1 operation holds just 2 locks at one time?
+//                                        or holds a sequence of locks from root to bottom?
+
 namespace DB::tree
 {
 
@@ -115,6 +118,16 @@ namespace DB::tree
         // release write-lock of root, then hold the read-lock of root.
         root_->page_write_unlock();
         root_->page_read_lock();
+
+        //  maybe update index and node=root_.br[index] after split_leaf.
+        if (index != root_->nEntry_ // if equal, no split happens.
+            && key_compare(kvEntry.kEntry, root_, index) > 0) {
+            node->page_write_unlock();
+            node->unref();
+            index++;
+            node = fetch_node(static_cast<link_ptr>(root_)->branch_[index]);
+            node->page_write_lock();
+        }
 
         // recursively go down then release read-lock.
         uint32_t insert_return = INSERT_NONFULL(node, kvEntry);
@@ -685,7 +698,6 @@ namespace DB::tree
     {
         info.leaf_id = NOT_A_PAGE;
         if (size_ == 0) return;
-        this->debug_page(root_->get_page_id());
         root_->page_read_lock();
         doSearch(root_, kEntry, info);
         root_->page_read_unlock();
@@ -1027,7 +1039,8 @@ namespace DB::tree
     //              2. hold write-lock of node.br[index]
     //                 if need to split node.br[index], then split.
     //              3. release write-lock of node, then hold the read-lock of node.
-    //              4. recursively go down then release read-lock.
+    //              4. maybe update index and child=node.br[index] after split_leaf.
+    //              5. recursively go down then release read-lock.
     uint32_t BTree::INSERT_NONFULL(base_ptr node, const KVEntry& kvEntry)
     {
         // step 1: find index such that kEntry <= node.k[index]
@@ -1081,7 +1094,17 @@ namespace DB::tree
             node->page_write_unlock();
             node->page_read_lock();
 
-            // step 4: recursively go down then release read-lock.
+            // step 4: maybe update index and child=node.br[index] after split_leaf.
+            if (index != node->nEntry_ && // if equal, no split happens.
+                key_compare(kvEntry.kEntry, node, index) > 0) {
+                child->page_write_unlock();
+                child->unref();
+                index++;
+                child = fetch_node(static_cast<link_ptr>(node)->branch_[index]);
+                child->page_write_lock();
+            }
+
+            // step 5: recursively go down then release read-lock.
             insert_return = INSERT_NONFULL(child, kvEntry);
             node->page_read_unlock();
 
@@ -1596,7 +1619,11 @@ namespace DB::tree
     } // end function `BTree::ERASE_NONMIN()`
 
 
-
+    void BTree::debug() const {
+        const page_id_t cur_page_id = storage_engine_->disk_manager_->get_cut_page_id();
+        for (page_id_t i = 1; i < cur_page_id; i++)
+            debug_page(i);
+    }
     void BTree::debug_page(page_id_t page_id) const {
         debug::debug_page(page_id, this->buffer_pool_);
     }

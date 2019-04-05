@@ -26,6 +26,8 @@ namespace DB::buffer
         Page* page_ptr = hash_lru_.find(page_id);
         if (page_ptr != nullptr) return page_ptr;
         debug::DEBUG_LOG("BufferPoolManager::FetchPage() does not fetch, read page %d\n", page_id);
+        // UNDONE: if invalid page_id
+        return nullptr;
         char buffer[page::PAGE_SIZE];
         disk_manager_->ReadPage(page_id, buffer);
         page_ptr = buffer_to_page(buffer);

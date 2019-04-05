@@ -235,11 +235,18 @@ namespace DB::page
     {
         KeyEntry kEntry;
         kEntry.key_t = key_t_;
-        const uint32_t offset = keys_[index];
-        if (data_[offset + KEY_STR_BLOCK - 1] != '\0')
-            kEntry.key_str = std::string(data_ + offset + 1, KEY_STR_BLOCK - 1);
+        if (key_t_ == key_t_t::INTEGER)
+        {
+            kEntry.key_int = keys_[index];
+        }
         else
-            kEntry.key_str = std::string(data_ + offset + 1);
+        {
+            const uint32_t offset = keys_[index];
+            if (data_[offset + KEY_STR_BLOCK - 1] != '\0')
+                kEntry.key_str = std::string(data_ + offset + 1, KEY_STR_BLOCK - 1);
+            else
+                kEntry.key_str = std::string(data_ + offset + 1);
+        }
         return kEntry;
     }
 
