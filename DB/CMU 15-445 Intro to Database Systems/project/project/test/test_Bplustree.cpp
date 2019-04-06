@@ -11,12 +11,16 @@
 using namespace DB::tree;
 using namespace std;
 
-void set(ValueEntry& vEntry, const char* s)
-{
+void set(ValueEntry& vEntry, const char* s) {
     const int size = strlen(s);
     std::memset(vEntry.content_, 0, sizeof(char)*MAX_TUPLE_SIZE);
     std::memcpy(vEntry.content_, s, size > MAX_TUPLE_SIZE ? MAX_TUPLE_SIZE : size);
 }
+
+inline int compare_v(const ValueEntry& vEntry, const std::string& s) {
+    return std::string(vEntry.content_) < s;
+}
+
 
 void test()
 {
@@ -48,6 +52,8 @@ void test()
     storage_engine->buffer_pool_manager_ = buffer_pool_manager.get();
     BTree bt(info, storage_engine.get(), page::key_t_t::INTEGER);
 
+    map<int32_t, std::string> mp_bt;
+
     KeyEntry key;
     key.key_t = page::key_t_t::INTEGER;
     ValueEntry value;
@@ -55,41 +61,101 @@ void test()
 
     KVEntry kv = { key ,value };
 
-    constexpr int key_test_size = 1000;
-    constexpr int debug_page_size = 25;
-    constexpr int key_test_find = 100;
+    constexpr int key_test_insert_size = 1000;
+    constexpr int key_test_erase_size = 233;
+    constexpr int key_test_find_size = 233;
     constexpr int rand_seed = 19280826;
-    srand(rand_seed);
+    srand(time(0) + rand_seed);
 
-    std::vector<int> keys(key_test_size);
-    for (int i = 0; i < key_test_size; i++)
+    std::vector<int> keys(key_test_insert_size);
+    for (int i = 0; i < key_test_insert_size; i++)
         keys[i] = i;
-    std::random_device rd;
-    std::mt19937 g(rd());
-    std::shuffle(keys.begin(), keys.end(), g);
+    //std::random_device rd;
+    //std::mt19937 g(rd());
+    //std::shuffle(keys.begin(), keys.end(), g);
 
+    int find_error = 0, insert_error = 0, erase_error = 0;
+
+    //
+    // insert test
+    //
     for (int i : keys)
     {
         key.key_int = i;
         set(value, s[i % (sizeof(s) / sizeof(const char*))]);
-        bt.insert({ key , value });
-        cout << i << endl;
+        auto ret1 = bt.insert({ key , value });
+        auto ret2 = mp_bt.insert(std::make_pair(key.key_int, std::string(value.content_)));
+        bool suc1 = ret1 == tree::INSERT_KV;
+        bool suc2 = ret2.second;
+        if (suc1 != suc2) {
+            printf("insert error at [key = %d]\n", i);
+            insert_error++;
+        }
     }
 
-    bt.debug();
-    //for (int i = 1; i < debug_page_size; i++)
-    //    bt.debug_page(i);
 
-
-    for (int i = 0; i < key_test_find; i++)
+    //
+    // erase test
+    //
+    for (int i = 0; i < key_test_erase_size; i++)
     {
         cout << endl;
-        key.key_int = ((rand() % key_test_size) + key_test_size) % key_test_size;
+        key.key_int = ((rand() % key_test_insert_size) + key_test_insert_size) % key_test_insert_size;
+        int ret1 = bt.erase(key);
+        auto ret2 = mp_bt.erase(key.key_int);
+        bool erase1 = ret1 == tree::ERASE_KV;
+        bool erase2 = ret2 == 1;
+        if (erase1 != erase2) {
+            if (erase1)
+                printf("erase error at [key = %d]: B+Tree should not has the key!!!\n", key.key_int);
+            else
+                printf("erase error at [key = %d]: B+Tree should has the key!!!\n", key.key_int);
+            erase_error++;
+        }
+        else {
+            if (erase1)
+                printf("erase ok at [key = %d]\n", key.key_int);
+            else
+                printf("erase ok at [key = %d]: nothing\n", key.key_int);
+        }
+    }
+
+
+    //
+    // find test
+    //
+    for (int i = 0; i < key_test_find_size; i++)
+    {
+        cout << endl;
+        key.key_int = ((rand() % key_test_insert_size) + key_test_insert_size) % key_test_insert_size;
         value = bt.find(key);
         cout << key.key_int << ": " << valueState[static_cast<int>(value.value_state_)]
             << " " << value.content_ << endl;
+        auto ret2 = mp_bt.find(key.key_int);
+        bool find1 = value.value_state_ == page::value_state::INUSED;
+        bool find2 = ret2 != mp_bt.end();
+        if (find1 != find2) {
+            if (!find1)
+                printf("find error at [key = %d]: key not found\n", key.key_int);
+            else
+                printf("find error at [key = %d]: key should not be found\n", key.key_int);
+            find_error++;
+        }
+        else if (find1 && compare_v(value, ret2->second) != 0) {
+            printf("find error at [key = %d]: value dismatched!!!\n", key.key_int);
+            find_error++;
+        }
     }
 
+
+    bt.debug();
+
+    printf("B+Tree size = %d\n", bt.size());
+    printf("map size = %d\n", mp_bt.size());
+
+    printf("find error = %d\n", find_error);
+    printf("insert error = %d\n", insert_error);
+    printf("erase error = %d\n", erase_error);
     printf("--------------------- test end ---------------------\n");
 
 }

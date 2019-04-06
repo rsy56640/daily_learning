@@ -162,7 +162,7 @@ namespace DB::tree
     //                              find K_index, recusively go down (from child).
     //                          2. child.nEntry = MIN_KEY
     //                              1] other-child.nEntry > MIN_KEY
-    //                                  *steal* one key/branch // (NB: set node.k[index] = max_KEntry)
+    //                                  *steal* one key/branch // (NB: set node.k[index] = max_KEntry), update parent
     //                              2] other-child.nEntry = MIN_KEY
     //                                  *merge* 2 childs into root.
     //                  b. root.nEntry > 1
@@ -519,6 +519,13 @@ namespace DB::tree
                                 root->insert_key(0, kEntry_steal);
                                 root->set_dirty();
 
+                                // update parent
+                                base_ptr adopted = fetch_node(L->branch_[L->nEntry_]);
+                                adopted->page_write_lock();
+                                adopted->set_parent_id(L->get_page_id());
+                                adopted->page_write_unlock();
+                                adopted->unref();
+
                             } // end child is left, steal right.k-br[0]
 
                             // child is right, steal left.k[nEntry-1], br[nEntry]
@@ -550,6 +557,13 @@ namespace DB::tree
                                 root->erase_key(0);
                                 root->insert_key(0, kEntry_steal);
                                 root->set_dirty();
+
+                                // update parent
+                                base_ptr adopted = fetch_node(R->branch_[0]);
+                                adopted->page_write_lock();
+                                adopted->set_parent_id(R->get_page_id());
+                                adopted->page_write_unlock();
+                                adopted->unref();
 
                             } // end child is right, steal left.k[nEntry-1], br[nEntry]
 
@@ -640,6 +654,7 @@ namespace DB::tree
 
                     } // end child.nEntry = MIN_KEY
 
+
                 } // end child is INTERNAL
 
 
@@ -683,7 +698,7 @@ namespace DB::tree
             info.value_page_id = NOT_A_PAGE;
             root_ = allocate_node(info);
             root_->set_dirty();
-            debug::DEBUG_LOG("init root_id = %d\n", root_->get_page_id());
+            debug::DEBUG_LOG(debug::BT_CREATE, "init root_id = %d\n", root_->get_page_id());
         }
         else
         {
@@ -767,6 +782,7 @@ namespace DB::tree
     //              1. create 2 INTERNAL, L and R
     //              2. 1) move root.k[0..6] + root.br[0..7] into L
     //                 2) move root.k[8..14] + root.br[8..15] into R
+    //                 3) update parent_id
     //              3. set root.k[0] = root.k[7], set branch, adjust the relation
     void BTree::split_root()
     {
@@ -784,6 +800,9 @@ namespace DB::tree
             info.next_page_id = NOT_A_PAGE;
             leaf_ptr L = static_cast<leaf_ptr>(allocate_node(info));
             leaf_ptr R = static_cast<leaf_ptr>(allocate_node(info));
+
+            debug::DEBUG_LOG(debug::SPLIT_ROOT_LEAF,
+                "split_root_leaf: [L = %d], [R = %d]\n", L->get_page_id(), R->get_page_id());
 
             // step 2: move root.k - v[0..7] into L, root.k - v[8..14] into R
             KeyEntry kEntry;
@@ -843,8 +862,12 @@ namespace DB::tree
             link_ptr L = static_cast<link_ptr>(allocate_node(info));
             link_ptr R = static_cast<link_ptr>(allocate_node(info));
 
+            debug::DEBUG_LOG(debug::SPLIT_ROOT_INTERNAL,
+                "split_root_internal: [L = %d], [R = %d]\n", L->get_page_id(), R->get_page_id());
+
             //step 2: 1) move root.k[0..6] + root.br[0..7] into L
             //        2) move root.k[8..14] + root.br[8..15] into R
+            //        3) update parent_id
             KeyEntry kEntry;
 
             for (uint32_t index = 0; index < KEY_MIDEIUM; index++) // [0..6]
@@ -869,6 +892,24 @@ namespace DB::tree
             R->branch_[KEY_MIDEIUM] = static_cast<root_ptr>(root_)->branch_[KEY_MIDEIUM + KEY_MIDEIUM + 1];
             R->nEntry_ = KEY_MIDEIUM;
             R->set_dirty();
+            // update parent_id
+            for (uint32_t index = 0; index <= L->nEntry_; index++) {
+                base_ptr child = fetch_node(L->branch_[index]);
+                child->page_write_lock();
+                child->set_parent_id(L->get_page_id());
+                child->set_dirty();
+                child->page_write_unlock();
+                child->unref();
+            }
+            for (uint32_t index = 0; index <= R->nEntry_; index++) {
+                base_ptr child = fetch_node(R->branch_[index]);
+                child->page_write_lock();
+                child->set_parent_id(R->get_page_id());
+                child->set_dirty();
+                child->page_write_unlock();
+                child->unref();
+            }
+
 
             // step 3: set root.k[0] = root.k[7], set branch, adjust the relation
             root_->nEntry_ = 1;
@@ -893,9 +934,13 @@ namespace DB::tree
         switch (L->get_page_t())
         {
         case page_t_t::INTERNAL:
+            debug::DEBUG_LOG(debug::SPLIT_INTERNAL, "split_internal: [id = %d], [parent_id = %d], [index = %d]\n",
+                L->get_page_id(), node->get_page_id(), split_index);
             split_internal(node, split_index, static_cast<link_ptr>(L));
             return;
         case page_t_t::LEAF:
+            debug::DEBUG_LOG(debug::SPLIT_LEAF, "split_leaf: [id = %d], [parent_id = %d], [index = %d]\n",
+                L->get_page_id(), node->get_page_id(), split_index);
             split_leaf(node, split_index, static_cast<leaf_ptr>(L));
             return;
         default:
@@ -908,7 +953,7 @@ namespace DB::tree
     // node is non-full parent, split node.branch[index].
     // operation:
     //              1. create 1 INTERNAL R, call node.branch[index] as L
-    //              2. move L.k[8..14] into R.k[0..6], L.br[8..15] into R.br[0..7]
+    //              2. move L.k[8..14] into R.k[0..6], L.br[8..15] into R.br[0..7], update parent_id.
     //              3. shift node.k/br to right
     //              4. move L.k[7] upto node.k[index], set node.br[index+1] = R
     void BTree::split_internal(link_ptr node, uint32_t split_index, link_ptr L) const
@@ -921,7 +966,8 @@ namespace DB::tree
         info.str_len = str_len_;
         link_ptr R = static_cast<link_ptr>(allocate_node(info));
 
-        // step 2: move L.k[8..14] into R.k[0..6], L.br[8..15] into R.br[0..7]
+
+        // step 2: move L.k[8..14] into R.k[0..6], L.br[8..15] into R.br[0..7], update parent_id.
         KeyEntry kEntry;
         ValueEntry vEntry;
         for (uint32_t R_index = 0; R_index < KEY_MIDEIUM; R_index++) // [0..6]
@@ -937,6 +983,16 @@ namespace DB::tree
         R->nEntry_ = KEY_MIDEIUM;
         L->set_dirty();
         R->set_dirty();
+        // update parent_id
+        for (uint32_t index = 0; index <= R->nEntry_; index++) {
+            base_ptr child = fetch_node(R->branch_[index]);
+            child->page_write_lock();
+            child->set_parent_id(R->get_page_id());
+            child->set_dirty();
+            child->page_write_unlock();
+            child->unref();
+        }
+
 
         // step 3: shift node.k/br to right
         node->nEntry_++;
@@ -945,6 +1001,7 @@ namespace DB::tree
             node->keys_[index] = node->keys_[index - 1];
             node->branch_[index + 1] = node->branch_[index];
         }
+
 
         // step 4: move L.k[7] upto node.k[index], set node.br[index+1] = R
         kEntry = L->read_key(KEY_MIDEIUM);
@@ -1039,7 +1096,7 @@ namespace DB::tree
     //              2. hold write-lock of node.br[index]
     //                 if need to split node.br[index], then split.
     //              3. release write-lock of node, then hold the read-lock of node.
-    //              4. maybe update index and child=node.br[index] after split_leaf.
+    //              4. maybe update index and child=node.br[index] after split.
     //              5. recursively go down then release read-lock.
     uint32_t BTree::INSERT_NONFULL(base_ptr node, const KVEntry& kvEntry)
     {
@@ -1094,7 +1151,7 @@ namespace DB::tree
             node->page_write_unlock();
             node->page_read_lock();
 
-            // step 4: maybe update index and child=node.br[index] after split_leaf.
+            // step 4: maybe update index and child=node.br[index] after split.
             if (index != node->nEntry_ && // if equal, no split happens.
                 key_compare(kvEntry.kEntry, node, index) > 0) {
                 child->page_write_unlock();
@@ -1139,12 +1196,12 @@ namespace DB::tree
 
     // all write-lock held, L.nEntry = R.nEtnry = KEY_MIN_SIZE
     // move R into L.
-    //     move R.key[0..6] -> L.key[8..14], R.br[0..7] -> L.br[..15]
+    //     move R.key[0..6] -> L.key[8..14], R.br[0..7] -> L.br[8..15], update parent_id
     //     move node.key[index] -> L.key[7]
     //     adjust node.key and node.branch
     void BTree::merge_internal(link_ptr node, uint32_t merge_index, link_ptr L, link_ptr R)
     {
-        // move R.key[0..6] -> L.key[8..14], R.br[0..7] -> L.br[8..15]
+        // move R.key[0..6] -> L.key[8..14], R.br[0..7] -> L.br[8..15], update parent_id
         KeyEntry kEntry;
         for (uint32_t R_index = 0; R_index < KEY_MIDEIUM; R_index++) // [0..6]
         {
@@ -1157,6 +1214,15 @@ namespace DB::tree
         L->branch_[MAX_KEY_SIZE] = R->branch_[KEY_MIDEIUM];
         R->nEntry_ = 0;
         R->set_dirty();
+
+        for (uint32_t index = 8; index <= MAX_KEY_SIZE; index++) // [8..15]
+        {
+            base_ptr adopted = fetch_node(L->branch_[index]);
+            adopted->page_write_lock();
+            adopted->set_parent_id(L->get_page_id());
+            adopted->page_write_unlock();
+            adopted->unref();
+        }
 
         // move node.key[index] -> L.key[7]
         kEntry = node->read_key(merge_index);
@@ -1289,11 +1355,11 @@ namespace DB::tree
     //                  b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
     //                     1) R.nEntry > MIN_KEY
     //                          *steal* R.key[0] and R.branch[0] to child.
-    //                          set node.key[index] = max_KEntry(child.br[nEntry])
+    //                          set node.key[index] = max_KEntry(child.br[nEntry]), update parent.
     //                          find K_index, recusively go down.
     //                     2) R.nEntry = MIN_KEY
     //                          *merge* child and R into child.
-    //                              move R.key[0..6] -> child.key[8..14]
+    //                              move R.key[0..6] -> child.key[8..14], R.br[0..7] -> L.br[8..15], update parent_id
     //                              move noed.key[index] -> child.key[7]
     //                              adjust node.key and node.branch
     //                          find K_index, recusively go down.
@@ -1526,7 +1592,7 @@ namespace DB::tree
                 if (R->nEntry_ > MIN_KEY_SIZE)
                 {
                     // *steal* R.key[0] and R.branch[0] to child.
-                    // set node.key[index] = R.key[0]
+                    // set node.key[index] = R.key[0], update parent.
                     // find K_index, recusively go down.
 
                     // steal
@@ -1550,11 +1616,18 @@ namespace DB::tree
                     R->page_write_unlock();
                     R->unref();
 
-                    // set node.k[index]
+                    // set node.k[index], update parent.
+                    // TODO: this line can be comment.
                     kEntry_steal = max_KeyEntry(child_link->branch_[child_link->nEntry_]);
                     node->erase_key(index);
                     node->insert_key(index, kEntry_steal);
                     node->set_dirty();
+                    base_ptr adopted = fetch_node(child_link->branch_[child_link->nEntry_]);
+                    adopted->page_write_lock();
+                    adopted->set_parent_id(child_link->get_page_id());
+                    adopted->page_write_unlock();
+                    adopted->unref();
+
 
                     // find K_index, recusively go down.
 
@@ -1581,7 +1654,7 @@ namespace DB::tree
                 else
                 {
                     // *merge* child and R into child.
-                    //     move R.key[0..6] -> child.key[8..14]
+                    //     move R.key[0..6] -> child.key[8..14], R.br[0..7] -> L.br[8..15], update parent_id
                     //     move noed.key[index] -> child.key[7]
                     //     adjust node.key and node.branch
                     // find K_index, recusively go down.
@@ -1621,7 +1694,7 @@ namespace DB::tree
 
     void BTree::debug() const {
         const page_id_t cur_page_id = storage_engine_->disk_manager_->get_cut_page_id();
-        for (page_id_t i = 1; i < cur_page_id; i++)
+        for (page_id_t i = 1; i <= cur_page_id; i++)
             debug_page(i);
     }
     void BTree::debug_page(page_id_t page_id) const {

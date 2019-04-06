@@ -13,17 +13,6 @@ using std::endl;
 
 namespace DB::debug
 {
-
-    void ERROR_LOG(const char* msg)
-    {
-        std::cout << "Error Message: " << msg << std::endl;
-    }
-
-    void DEBUG_LOG(const char* msg)
-    {
-        std::cout << "Debug Message: " << msg << std::endl;
-    }
-
     /*
     struct clean_output {
         clean_output(std::streambuf* coutbuf, std::ofstream* out)

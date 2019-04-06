@@ -46,7 +46,7 @@ namespace DB::disk
         DiskManager& operator=(DiskManager&&) = delete;
 
     private:
-        std::atomic<page_id_t> cur_page_no_;
+        std::atomic<page_id_t> cur_page_no_; // the last used page_id
 
         // stream to write db file
         const std::string file_name_;

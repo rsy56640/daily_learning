@@ -38,6 +38,12 @@ namespace DB::tree
     constexpr uint32_t MAX_LEAF_SIZE = MAX_KEY_SIZE;        // 15
     constexpr uint32_t KEY_MIDEIUM = MAX_KEY_SIZE >> 1;     // 7 in [0...6] [7] [8...14]
 
+    static constexpr uint32_t
+        INSERT_NOTHING = 0,
+        INSERT_KV = 1,
+        ERASE_NOTHING = 0,
+        ERASE_KV = 1;
+
     // NB: in the B+Tree, the root page should be `ref()` in the whole execution,
     //     while other pages are fetched from buffer-pool whenever used.
     // Internal Page structure:
@@ -56,12 +62,6 @@ namespace DB::tree
         using link_ptr = InternalPage * ;
         using leaf_ptr = LeafPage * ;
         using root_ptr = RootPage * ;
-
-        static constexpr uint32_t
-            INSERT_NOTHING = 0,
-            INSERT_KV = 1,
-            ERASE_NOTHING = 0,
-            ERASE_KV = 1;
 
     public:
         BTree(OpenTableInfo, vm::StorageEngine* storage_engine, key_t_t, uint32_t str_len = 0);
@@ -112,7 +112,7 @@ namespace DB::tree
         //                              find K_index, recusively go down (from child).
         //                          2. child.nEntry = MIN_KEY
         //                              1] other-child.nEntry > MIN_KEY
-        //                                  *steal* one key/branch // (NB: set node.k[index] = max_KEntry)
+        //                                  *steal* one key/branch // (NB: set node.k[index] = max_KEntry), update parent
         //                              2] other-child.nEntry = MIN_KEY
         //                                  *merge* 2 childs into root.
         //                  b. root.nEntry > 1
@@ -159,6 +159,7 @@ namespace DB::tree
         //              1. create 2 INTERNAL, L and R
         //              2. 1) move root.k[0..6] + root.br[0..7] into L
         //                 2) move root.k[8..14] + root.br[8..15] into R
+        //                 3) update parent_id
         //              3. set root.k[0] = root.k[7], set branch, adjust the relation
         void split_root();
 
@@ -173,7 +174,7 @@ namespace DB::tree
         // node should hold the write lock.
         // operation:
         //              1. create 1 INTERNAL R, call node.branch[index] as L
-        //              2. move L.k[8..14] into R.k[0..6], L.br[8..15] into R.br[0..7]
+        //              2. move L.k[8..14] into R.k[0..6], L.br[8..15] into R.br[0..7], update parent_id.
         //              3. shift node.k/br to right
         //              4. move L.k[7] upto node.k[index], set node.br[index+1] = R
         void split_internal(link_ptr node, uint32_t index, link_ptr L) const;
@@ -203,7 +204,7 @@ namespace DB::tree
         //              2. hold write-lock of node.br[index]
         //                 if need to split node.br[index], then split.
         //              3. release write-lock of node, then hold the read-lock of node.
-        //              4. maybe update index and child=node.br[index] after split_leaf.
+        //              4. maybe update index and child=node.br[index] after split.
         //              5. recursively go down then release read-lock.
         uint32_t INSERT_NONFULL(base_ptr node, const KVEntry&);
 
@@ -260,11 +261,11 @@ namespace DB::tree
         //                  b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
         //                     1) R.nEntry > MIN_KEY
         //                          *steal* R.key[0] and R.branch[0] to child.
-        //                          set node.key[index] = max_KEntry(child.br[nEntry])
+        //                          set node.key[index] = max_KEntry(child.br[nEntry]), update parent.
         //                          find K_index, recusively go down.
         //                     2) R.nEntry = MIN_KEY
         //                          *merge* child and R into child.
-        //                              move R.key[0..6] -> child.key[8..14]
+        //                              move R.key[0..6] -> child.key[8..14], R.br[0..7] -> L.br[8..15], update parent_id
         //                              move noed.key[index] -> child.key[7]
         //                              adjust node.key and node.branch
         //                          find K_index, recusively go down.

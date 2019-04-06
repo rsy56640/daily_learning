@@ -61,11 +61,8 @@ namespace DB::disk
         db_io_.write(page_data, PAGE_SIZE);
         if (db_io_.bad())
         {
-            std::string error_log;
-            error_log.reserve(23 + file_name_.size() + 13 + 10);
-            error_log += "I/O writing error in \"" + file_name_
-                + "\", page_id: " + std::to_string(page_id);
-            debug::DEBUG_LOG(error_log.c_str());
+            debug::ERROR_LOG("I/O writing error in \"%s\", page_id: %d\n",
+                file_name_.c_str(), page_id);
             return;
         }
         db_io_.flush();
@@ -79,11 +76,8 @@ namespace DB::disk
         const uint32_t read_count = db_io_.gcount();
         if (read_count < PAGE_SIZE)
         {
-            std::string error_log;
-            error_log.reserve(30 + file_name_.size() + 13 + 10);
-            error_log += "Read less than PAGE_SIZE in \"" + file_name_
-                + "\", page_id: " + std::to_string(page_id);
-            debug::DEBUG_LOG(error_log.c_str());
+            debug::ERROR_LOG("Read less than PAGE_SIZE in \"%s\", page_id: %d\n",
+                file_name_.c_str(), page_id);
             memset(page_data + read_count, 0, PAGE_SIZE - read_count);
         }
     }
@@ -94,10 +88,8 @@ namespace DB::disk
         log_io_.write(log_data, size);
         if (db_io_.bad())
         {
-            std::string error_log;
-            error_log.reserve(23 + file_name_.size());
-            error_log += "Log writing error in \"" + file_name_;
-            debug::DEBUG_LOG(error_log.c_str());
+            debug::ERROR_LOG("Log writing error in \"%s\"\n",
+                file_name_.c_str());
             return;
         }
         log_io_.flush();

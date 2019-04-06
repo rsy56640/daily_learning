@@ -76,6 +76,8 @@ namespace DB::page
 
         uint32_t get_nEntry() const noexcept;
 
+        void set_parent_id(page_id_t) noexcept;
+
         char* get_data() noexcept;
 
         void set_dirty() noexcept;

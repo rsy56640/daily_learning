@@ -43,7 +43,7 @@ namespace DB::page
     }
 
     void Page::unref() {
-        debug::DEBUG_LOG("page_id %d ref %d -> %d\n",
+        debug::DEBUG_LOG(debug::PAGE_REF, "page_id %d ref %d -> %d\n",
             this->get_page_id(), ref_count_.load(), ref_count_.load() - 1);
         if (--ref_count_ == 0) {
             if (dirty_) {
@@ -68,6 +68,11 @@ namespace DB::page
 
     uint32_t Page::get_nEntry() const noexcept {
         return nEntry_;
+    }
+
+    void Page::set_parent_id(page_id_t parent_id) noexcept {
+        parent_id_ = parent_id;
+        dirty_ = true;
     }
 
     char* Page::get_data() noexcept {

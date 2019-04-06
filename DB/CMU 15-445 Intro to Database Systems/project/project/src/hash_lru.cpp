@@ -356,6 +356,7 @@ namespace DB::buffer
 
     void Hash_LRU::lru_evict()
     {
+        ///*
         page_id_t page_id;
         PageListHandle* victim;
 
@@ -388,10 +389,9 @@ namespace DB::buffer
             victim->unref(); // `unref` for LRU
         }
 
-        {
-            std::string msg = "`Hash_LRU::lru_evict()` evict: " + std::to_string(page_id);
-            debug::DEBUG_LOG(msg.c_str());
-        }
+        debug::DEBUG_LOG(debug::LRU_EVICT,
+            "Hash_LRU::lru_evict() evict: [evict_id = %d]n", page_id);
+        //*/
 
     } // end function `void Hash_LRU::lru_evict()`
 

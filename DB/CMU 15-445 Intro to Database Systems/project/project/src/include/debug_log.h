@@ -7,19 +7,32 @@
 namespace DB::debug
 {
 
+    constexpr bool
+        PAGE_REF = true,
+        LRU_EVICT = true,
+        BUFFER_FETCH = true,
+        BUFFER_FLUSH = true,
+        BUFFER_DELETE = true,
+        SPLIT_ROOT_INTERNAL = true,
+        SPLIT_ROOT_LEAF = true,
+        SPLIT_INTERNAL = true,
+        SPLIT_LEAF = true,
+        MERGE_INTERNAL = true,
+        MERGE_LEAF = true,
+        BT_CREATE = true,
+        _ = false;
+
     static const char* debug_output = "./debug_output.txt";
 
-    void ERROR_LOG(const char*);
-    void DEBUG_LOG(const char*);
 
     template<typename ...Arg>
-    void DEBUG_LOG(Arg... args) {
-        std::printf(args...);
+    void DEBUG_LOG(bool config, const char* format, Arg... args) {
+        if (config) std::printf(format, args...);
     }
 
     template<typename ...Arg>
-    void ERROR_LOG(Arg... args) {
-        std::printf(args...);
+    void ERROR_LOG(const char* format, Arg... args) {
+        std::printf(format, args...);
     }
 
     void debug_page(const page::page_id_t, buffer::BufferPoolManager*);
