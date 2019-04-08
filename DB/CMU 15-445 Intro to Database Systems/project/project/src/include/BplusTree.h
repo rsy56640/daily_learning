@@ -103,7 +103,7 @@ namespace DB::tree
         //                                  if delete child.key successfully,
         //                                  steal 1 k-v from other-child.
         //                              2] other-child.nEntry = MIN_KEY
-        //                                  *** This is the only case root -> ROOT_LEAF ***
+        //                                  *** This is the only case root -> ROOT_LEAF *** (height-1 = 1)
         //                                  change root to ROOT_LEAF.
         //                                  steal the 2 childs' k-v.
         //                                  delete 2 childs.
@@ -112,9 +112,9 @@ namespace DB::tree
         //                              find K_index, recusively go down (from child).
         //                          2. child.nEntry = MIN_KEY
         //                              1] other-child.nEntry > MIN_KEY
-        //                                  *steal* one key/branch // (NB: set node.k[index] = max_KEntry), update parent
+        //                                  *steal* one key/branch (carefully set key/branch)
         //                              2] other-child.nEntry = MIN_KEY
-        //                                  *merge* 2 childs into root.
+        //                                  *merge* 2 childs into root. (height-1)
         //                  b. root.nEntry > 1
         //                     find K_index, recusively go down.
         uint32_t erase(const KeyEntry&);
@@ -234,6 +234,8 @@ namespace DB::tree
         uint32_t erase_from_leaf(leaf_ptr, const KeyEntry&);
 
 
+        // Arg:
+        //              1. child = node.branch[index], ***index maybe the last branch***.
         // REQUIREMENT: 
         //              1. when call this function, the root must be ROOT_INTERNAL.
         //              2. if node is INTERNAL, node.nEntry >= MIN_KEY+1
@@ -258,16 +260,29 @@ namespace DB::tree
         //              1.  a. child.nEntry > MIN_KEY
         //                     find K_index, such that child.key[K_index] <= kEntry
         //                     recusively go down.
-        //                  b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
+        //                  b. child.nEntry = MIN_KEY, call node.branch[index+1] (if has) as R.
         //                     1) R.nEntry > MIN_KEY
-        //                          *steal* R.key[0] and R.branch[0] to child.
-        //                          set node.key[index] = max_KEntry(child.br[nEntry]), update parent.
+        //                          *steal* R.branch[0] to child.branch[8]
+        //                          set node.key[index] = old-R.key[0], update parent.
+        //                          set L.key[7] = old-node.key[index]
         //                          find K_index, recusively go down.
         //                     2) R.nEntry = MIN_KEY
         //                          *merge* child and R into child.
         //                              move R.key[0..6] -> child.key[8..14], R.br[0..7] -> L.br[8..15], update parent_id
         //                              move noed.key[index] -> child.key[7]
         //                              adjust node.key and node.branch
+        //                          find K_index, recusively go down.
+        //                  c. child.nEntry = MIN_KEY, call node.branch[index-1] as L.
+        //                     1) L.nEntry > MIN_KEY
+        //                          *steal* L.branch[L.nEntry] to child.branch[0]
+        //                          set child.key[0] = node.key[index-1], update parent.
+        //                          set node.key[index-1] = old-L.key[L.nEntry-1]
+        //                          find K_index, recusively go down.
+        //                     2) L.nEntry = MIN_KEY
+        //                          *merge* L and child into child.
+        //                          move child.key[0..6] -> L.key[8..14], child.br[0..7] -> L.br[8..15], update parent_id
+        //                          move noed.key[index-1] -> L.key[7]
+        //                          adjust node.key and node.branch
         //                          find K_index, recusively go down.
         uint32_t ERASE_NONMIN(link_ptr node, uint32_t index, base_ptr child, const KeyEntry&);
 

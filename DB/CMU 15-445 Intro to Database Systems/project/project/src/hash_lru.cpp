@@ -228,14 +228,15 @@ namespace DB::buffer
             if (_page_handle == nullptr)
                 return false;
 
-            page_list.remove(_page_handle);
-
             // `ref()` the handle here to extend its life
             // at least after acquire the LRU_lock in case that:
             // another thread attempts to evict the handle from LRU,
             // if we leave this block, the `evict()` will do nothing but `unref()`,
             // therefore the handle will be deleted.
             _page_handle->ref();
+
+            page_list.remove(_page_handle); // set `in_page_list_ = false` inside.
+
         }
 
         // remove handle from LRU

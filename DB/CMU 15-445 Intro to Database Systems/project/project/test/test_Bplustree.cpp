@@ -61,10 +61,10 @@ void test()
 
     KVEntry kv = { key ,value };
 
-    constexpr int key_test_insert_size = 1000;
-    constexpr int key_test_erase_size = 233;
-    constexpr int key_test_find_size = 233;
-    constexpr int rand_seed = 19280826;
+    constexpr int key_test_insert_size = 300;
+    constexpr int key_test_erase_size = 300;
+    constexpr int key_test_find_size = 256;
+    constexpr int rand_seed = 19260817;
     srand(time(0) + rand_seed);
 
     std::vector<int> keys(key_test_insert_size);
@@ -99,6 +99,7 @@ void test()
     //
     for (int i = 0; i < key_test_erase_size; i++)
     {
+        bt.debug_page(1);
         cout << endl;
         key.key_int = ((rand() % key_test_insert_size) + key_test_insert_size) % key_test_insert_size;
         int ret1 = bt.erase(key);
@@ -111,6 +112,7 @@ void test()
             else
                 printf("erase error at [key = %d]: B+Tree should has the key!!!\n", key.key_int);
             erase_error++;
+            break;
         }
         else {
             if (erase1)

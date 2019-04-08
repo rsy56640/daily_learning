@@ -119,7 +119,7 @@ namespace DB::tree
         root_->page_write_unlock();
         root_->page_read_lock();
 
-        //  maybe update index and node=root_.br[index] after split_leaf.
+        //  maybe update index and node=root_.br[index] after split.
         if (index != root_->nEntry_ // if equal, no split happens.
             && key_compare(kvEntry.kEntry, root_, index) > 0) {
             node->page_write_unlock();
@@ -153,7 +153,7 @@ namespace DB::tree
     //                                  if delete child.key successfully,
     //                                  steal 1 k-v from other-child.
     //                              2] other-child.nEntry = MIN_KEY
-    //                                  *** This is the only case root -> ROOT_LEAF ***
+    //                                  *** This is the only case root -> ROOT_LEAF *** (height-1 = 1)
     //                                  change root to ROOT_LEAF.
     //                                  steal the 2 childs' k-v.
     //                                  delete 2 childs.
@@ -162,9 +162,9 @@ namespace DB::tree
     //                              find K_index, recusively go down (from child).
     //                          2. child.nEntry = MIN_KEY
     //                              1] other-child.nEntry > MIN_KEY
-    //                                  *steal* one key/branch // (NB: set node.k[index] = max_KEntry), update parent
+    //                                  *steal* one key/branch (carefully set key/branch)
     //                              2] other-child.nEntry = MIN_KEY
-    //                                  *merge* 2 childs into root.
+    //                                  *merge* 2 childs into root. (height-1)
     //                  b. root.nEntry > 1
     //                     find K_index, recusively go down.
     uint32_t BTree::erase(const KeyEntry& kEntry)
@@ -176,6 +176,9 @@ namespace DB::tree
         // I.root is ROOT_LEAF
         if (root->get_page_t() == page_t_t::ROOT_LEAF)
         {
+            debug::DEBUG_LOG(debug::ERASE_ROOT_LEAF,
+                "erase ROOT_LEAF [root_id = %d]\n", root->get_page_id());
+
             // 1. directly delete if exists.
             uint32_t index = 0;
             for (; index < root->nEntry_; index++)
@@ -207,11 +210,17 @@ namespace DB::tree
         // II.root is ROOT_INTERNAL
         else
         {
+            debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                "erase ROOT_INTERNAL [root_id = %d]\n", root->get_page_id());
+
             // a. root.nEntry = 1, call it (the founded one) as child.
             if (root->nEntry_ == 1)
             {
                 bool child_L = true;
                 base_ptr child, other_child;
+                debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                    "root 2 child is %d, %d\n",
+                    root->branch_[0], root->branch_[1]);
                 if (key_compare(kEntry, root, 0) <= 0) {
                     child = fetch_node(root->branch_[0]);
                     other_child = fetch_node(root->branch_[1]);
@@ -227,6 +236,10 @@ namespace DB::tree
                 // 1) child is LEAF (remember to release root write-locks)
                 if (child->get_page_t() == page_t_t::LEAF)
                 {
+                    debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                        "erase ROOT_INTERNAL, child is LEAF [root_id = %d], [child_id = %d]\n",
+                        root->get_page_id(), child->get_page_id());
+
                     leaf_ptr child_leaf = static_cast<leaf_ptr>(child);
                     leaf_ptr other_child_leaf = static_cast<leaf_ptr>(other_child);
 
@@ -275,6 +288,10 @@ namespace DB::tree
                         // 1] other-child.nEntry > MIN_KEY
                         if (other_child_leaf->nEntry_ > MIN_KEY_SIZE)
                         {
+                            debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                                "erase ROOT_INTERNAL, child is LEAF [root_id = %d], [child_id = %d], [other_id = %d], other-child.nEntry > MIN_KEY\n",
+                                root->get_page_id(), child->get_page_id(), other_child->get_page_id());
+
                             // if delete child.key successfully, steal 1 k-v from other-child.
                             uint32_t K_index = 0;
                             for (; K_index < child_leaf->nEntry_; K_index++)
@@ -298,6 +315,10 @@ namespace DB::tree
                                 // steal from right.k-v[0]
                                 if (child_L)
                                 {
+                                    debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                                        "erase ROOT_INTERNAL, child is LEAF [root_id = %d], [child_id = %d], [other_id = %d], other-child.nEntry > MIN_KEY\n child is left leaf, steal right.\n",
+                                        root->get_page_id(), child->get_page_id(), other_child->get_page_id());
+
                                     // shift left
                                     for (uint32_t i = K_index; i < child_leaf->nEntry_; i++)
                                     {
@@ -328,6 +349,10 @@ namespace DB::tree
                                 // steal from left.k-v[nEntry-1]
                                 else
                                 {
+                                    debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                                        "erase ROOT_INTERNAL, child is LEAF [root_id = %d], [child_id = %d], [other_id = %d], other-child.nEntry > MIN_KEY\n child is right leaf, steal left.\n",
+                                        root->get_page_id(), child->get_page_id(), other_child->get_page_id());
+
                                     // shift right
                                     for (uint32_t i = K_index; i > 0; i--)
                                     {
@@ -370,7 +395,11 @@ namespace DB::tree
                         // 2] other-child.nEntry = MIN_KEY
                         else
                         {
-                            // *** This is the only case root -> ROOT_LEAF ***
+                            debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                                "erase ROOT_INTERNAL, child is LEAF [root_id = %d], [child_id = %d], [other_id = %d], other-child.nEntry = MIN_KEY\n merge 2 leaf into root -> ROOT_LEAF\n",
+                                root->get_page_id(), child->get_page_id(), other_child->get_page_id());
+
+                            // *** This is the only case root -> ROOT_LEAF *** (height-1 = 1)
                             // change root to ROOT_LEAF.
                             // steal the 2 childs' k-v.
                             // delete 2 childs.
@@ -454,12 +483,20 @@ namespace DB::tree
                 // 2) child is INTERNAL
                 else
                 {
+                    debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                        "erase ROOT_INTERNAL, child is INTERNAL [root_id = %d], [child_id = %d]\n",
+                        root->get_page_id(), child->get_page_id());
+
                     link_ptr child_link = static_cast<link_ptr>(child);
                     link_ptr other_child_link = static_cast<link_ptr>(other_child);
 
                     // 1. child.nEntry > MIN_KEY
                     if (child_link->nEntry_ > MIN_KEY_SIZE)
                     {
+                        debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                            "erase ROOT_INTERNAL, child is INTERNAL [root_id = %d], [child_id = %d], child.nEntry > MIN_KEY\n",
+                            root->get_page_id(), child->get_page_id());
+
                         other_child->unref();
 
                         // find K_index, recusively go down (from child).
@@ -486,22 +523,32 @@ namespace DB::tree
                     // 2. child.nEntry = MIN_KEY
                     else
                     {
+                        debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                            "erase ROOT_INTERNAL, child is INTERNAL [root_id = %d], [child_id = %d], [other_id = %d], child.nEntry = MIN_KEY\n",
+                            root->get_page_id(), child->get_page_id(), other_child->get_page_id());
+
                         other_child_link->page_write_lock();
 
                         // 1] other-child.nEntry > MIN_KEY
                         if (other_child_link->nEntry_ > MIN_KEY_SIZE)
                         {
-                            // *steal* one key / branch // (NB: set node.k[index] = max_KEntry)
+                            debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                                "erase ROOT_INTERNAL, child is INTERNAL [root_id = %d], [child_id = %d], [other_id = %d], child.nEntry = MIN_KEY, other-child.nEntry > MIN_KEY, steal\n",
+                                root->get_page_id(), child->get_page_id(), other_child->get_page_id());
+
+                            // *steal* one key/branch (carefully set key/branch)
 
                             // child is left, steal right.k-br[0]
                             if (child_L)
                             {
+                                debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                                    "steal from left\n");
+
                                 link_ptr L = child_link, R = other_child_link;
 
-                                KeyEntry kEntry_steal = R->read_key(0);
-                                L->insert_key(MIN_KEY_SIZE, kEntry_steal);
+                                KeyEntry kEntry_steal_R = R->read_key(0);
                                 L->nEntry_++;
-                                L->branch_[L->nEntry_] = R->branch_[0];
+                                L->branch_[MIN_KEY_SIZE + 1] = R->branch_[0];
 
                                 // shift left
                                 R->erase_key(0);
@@ -513,11 +560,15 @@ namespace DB::tree
                                 }
                                 R->branch_[R->nEntry_] = R->branch_[R->nEntry_ + 1];
 
-                                // set root.k[0] // carefully
-                                kEntry_steal = max_KeyEntry(L->branch_[L->nEntry_]);
+                                // set root.k[0]
+                                KeyEntry kEntry_steal_root = root->read_key(0);
                                 root->erase_key(0);
-                                root->insert_key(0, kEntry_steal);
+                                root->insert_key(0, kEntry_steal_R);
                                 root->set_dirty();
+
+                                // set L.key[7]
+                                L->insert_key(MIN_KEY_SIZE, kEntry_steal_root);
+                                L->set_dirty();
 
                                 // update parent
                                 base_ptr adopted = fetch_node(L->branch_[L->nEntry_]);
@@ -531,6 +582,9 @@ namespace DB::tree
                             // child is right, steal left.k[nEntry-1], br[nEntry]
                             else
                             {
+                                debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                                    "steal from right\n");
+
                                 link_ptr L = other_child_link, R = child_link;
 
                                 // shift right
@@ -543,8 +597,9 @@ namespace DB::tree
                                 }
 
                                 // steal left.k[nEntry-1], br[nEntry]
-                                KeyEntry kEntry_steal = L->read_key(L->nEntry_ - 1);
-                                R->insert_key(0, kEntry_steal);
+                                KeyEntry kEntry_steal_L = L->read_key(L->nEntry_ - 1);
+                                KeyEntry kEntry_steal_ROOT = root->read_key(0);
+                                R->insert_key(0, kEntry_steal_ROOT);
                                 R->branch_[0] = L->branch_[L->nEntry_];
                                 L->erase_key(L->nEntry_ - 1);
                                 L->nEntry_--;
@@ -553,9 +608,8 @@ namespace DB::tree
                                 R->set_dirty();
 
                                 // set root.k[0]
-                                kEntry_steal = max_KeyEntry(L->branch_[L->nEntry_]);
                                 root->erase_key(0);
-                                root->insert_key(0, kEntry_steal);
+                                root->insert_key(0, kEntry_steal_L);
                                 root->set_dirty();
 
                                 // update parent
@@ -565,7 +619,16 @@ namespace DB::tree
                                 adopted->page_write_unlock();
                                 adopted->unref();
 
+                                // sepcial swap to view child as L below
+                                base_ptr temp = other_child;
+                                other_child = child;
+                                child = temp; // now child points to L
+
                             } // end child is right, steal left.k[nEntry-1], br[nEntry]
+
+                            //
+                            // NB: now child points to L
+                            //
 
                             // hold child write-lock
                             other_child->page_write_unlock();
@@ -583,9 +646,9 @@ namespace DB::tree
                             uint32_t erase_return = ERASE_NONMIN(child_link, K_index, child_child, kEntry);
                             child_child->unref();
 
-                            child_link->unref(); // here special, since no caller
-
                             root->page_read_unlock();
+
+                            child_link->unref(); // here special, since no caller
 
                             return erase_return;
 
@@ -595,7 +658,11 @@ namespace DB::tree
                         // 2] other-child.nEntry = MIN_KEY
                         else
                         {
-                            // *merge* 2 childs into root.
+                            debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                                "erase ROOT_INTERNAL, child is INTERNAL [root_id = %d], [child_id = %d], [other_id = %d], child.nEntry = MIN_KEY, other-child.nEntry = MIN_KEY\n merge 2 childs into root, heigh-1\n",
+                                root->get_page_id(), child->get_page_id(), other_child->get_page_id());
+
+                            // *merge* 2 childs into root. (height-1)
                             link_ptr L, R;
                             if (child_L) {
                                 L = child_link;
@@ -628,9 +695,19 @@ namespace DB::tree
                                 R->erase_key(i);
                                 root->branch_[i + KEY_MIDEIUM + 1] = R->branch_[i];
                             }
-                            root->branch_[MAX_KEY_SIZE] = R->branch_[MAX_KEY_SIZE];
+                            root->branch_[MAX_KEY_SIZE] = R->branch_[KEY_MIDEIUM];
 
                             root->nEntry_ = MAX_KEY_SIZE;
+
+                            // update parent
+                            for (uint32_t i = 0; i <= MAX_KEY_SIZE; i++) // br[0..15]
+                            {
+                                base_ptr adopted = fetch_node(root->branch_[i]);
+                                adopted->page_write_lock();
+                                adopted->set_parent_id(root->get_page_id());
+                                adopted->page_write_unlock();
+                                adopted->unref();
+                            }
 
                             child->page_write_unlock();
                             other_child->page_write_unlock();
@@ -663,6 +740,9 @@ namespace DB::tree
             // b. root.nEntry > 1
             else
             {
+                debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
+                    "erase ROOT_INTERNAL [root_id = %d], root.nEntry > 1\n", root->get_page_id());
+
                 // find K_index, recusively go down.
                 uint32_t K_index = 0;
                 for (; K_index < root->nEntry_; K_index++)
@@ -1201,6 +1281,10 @@ namespace DB::tree
     //     adjust node.key and node.branch
     void BTree::merge_internal(link_ptr node, uint32_t merge_index, link_ptr L, link_ptr R)
     {
+        debug::DEBUG_LOG(debug::MERGE_INTERNAL,
+            "merge_internal [node_id = %d], [merge_index = %d], [L = %d], [R = %d]\n",
+            node->get_page_id(), merge_index, L->get_page_id(), R->get_page_id());
+
         // move R.key[0..6] -> L.key[8..14], R.br[0..7] -> L.br[8..15], update parent_id
         KeyEntry kEntry;
         for (uint32_t R_index = 0; R_index < KEY_MIDEIUM; R_index++) // [0..6]
@@ -1250,6 +1334,10 @@ namespace DB::tree
     //     adjust node.key and node.branch
     void BTree::merge_leaf(link_ptr node, uint32_t merge_index, leaf_ptr L, leaf_ptr R)
     {
+        debug::DEBUG_LOG(debug::MERGE_LEAF,
+            "merge_leaf [node_id = %d], [merge_index = %d], [L = %d], [R = %d]\n",
+            node->get_page_id(), merge_index, L->get_page_id(), R->get_page_id());
+
         // move R.k-v[0..6] -> L.k-v[7.13], adjust relation
         KeyEntry kEntry;
         ValueEntry vEntry;
@@ -1328,6 +1416,8 @@ namespace DB::tree
     } // end function `erase_from_leaf(leaf, k)`
 
 
+    // Arg:
+    //              1. child = node.branch[index], ***index maybe the last branch***.
     // REQUIREMENT: 
     //              1. when call this function, the root must be ROOT_INTERNAL.
     //              2. if node is INTERNAL, node.nEntry >= MIN_KEY+1
@@ -1352,16 +1442,29 @@ namespace DB::tree
     //              1.  a. child.nEntry > MIN_KEY
     //                     find K_index, such that child.key[K_index] <= kEntry
     //                     recusively go down.
-    //                  b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
+    //                  b. child.nEntry = MIN_KEY, call node.branch[index+1] (if has) as R.
     //                     1) R.nEntry > MIN_KEY
-    //                          *steal* R.key[0] and R.branch[0] to child.
-    //                          set node.key[index] = max_KEntry(child.br[nEntry]), update parent.
+    //                          *steal* R.branch[0] to child.branch[8]
+    //                          set node.key[index] = old-R.key[0], update parent.
+    //                          set L.key[7] = old-node.key[index]
     //                          find K_index, recusively go down.
     //                     2) R.nEntry = MIN_KEY
     //                          *merge* child and R into child.
     //                              move R.key[0..6] -> child.key[8..14], R.br[0..7] -> L.br[8..15], update parent_id
     //                              move noed.key[index] -> child.key[7]
     //                              adjust node.key and node.branch
+    //                          find K_index, recusively go down.
+    //                  c. child.nEntry = MIN_KEY, call node.branch[index-1] as L.
+    //                     1) L.nEntry > MIN_KEY
+    //                          *steal* L.branch[L.nEntry] to child.branch[0]
+    //                          set child.key[0] = node.key[index-1], update parent.
+    //                          set node.key[index-1] = old-L.key[L.nEntry-1]
+    //                          find K_index, recusively go down.
+    //                     2) L.nEntry = MIN_KEY
+    //                          *merge* L and child into child.
+    //                          move child.key[0..6] -> L.key[8..14], child.br[0..7] -> L.br[8..15], update parent_id
+    //                          move noed.key[index-1] -> L.key[7]
+    //                          adjust node.key and node.branch
     //                          find K_index, recusively go down.
     uint32_t BTree::ERASE_NONMIN(link_ptr node, uint32_t index, base_ptr child, const KeyEntry& kEntry)
     {
@@ -1370,12 +1473,19 @@ namespace DB::tree
         // I. child is LEAF
         if (child->get_page_t() == page_t_t::LEAF)
         {
+            debug::DEBUG_LOG(debug::ERASE_NONMIN_LEAF,
+                "ERASE_NONMIN LEAF, [node_id = %d], [child_id = %d]\n",
+                node->get_page_id(), child->get_page_id());
 
             leaf_ptr child_leaf = static_cast<leaf_ptr>(child);
 
             // a. child.nEntry > MIN_KEY
             if (child_leaf->nEntry_ > MIN_KEY_SIZE)
             {
+                debug::DEBUG_LOG(debug::ERASE_NONMIN_LEAF,
+                    "ERASE_NONMIN LEAF, child.nEntry > MIN_KEY, [node_id = %d], [child_id = %d]\n",
+                    node->get_page_id(), child->get_page_id());
+
                 node->page_write_unlock();
                 node->page_read_lock();
 
@@ -1392,6 +1502,10 @@ namespace DB::tree
             // b. child.nEntry = MIN_KEY
             else
             {
+                debug::DEBUG_LOG(debug::ERASE_NONMIN_LEAF,
+                    "ERASE_NONMIN LEAF, child.nEntry = MIN_KEY, [node_id = %d], [child_id = %d]\n",
+                    node->get_page_id(), child->get_page_id());
+
                 // 1) left(right)-leaf.nEntry > MIN_KEY
                 //      *steal* 1 k-v from that leaf.
                 //      adjust node.key, child, leaf.
@@ -1556,11 +1670,19 @@ namespace DB::tree
         // II. child is INTERNAL
         else
         {
+            debug::DEBUG_LOG(debug::ERASE_NONMIN_INTERNAL,
+                "ERASE_NONMIN INTERNAL, [node_id = %d], [child_id = %d]\n",
+                node->get_page_id(), child->get_page_id());
+
             link_ptr child_link = static_cast<link_ptr>(child);
 
             // a. child.nEntry > MIN_KEY
             if (child_link->nEntry_ > MIN_KEY_SIZE)
             {
+                debug::DEBUG_LOG(debug::ERASE_NONMIN_INTERNAL,
+                    "ERASE_NONMIN INTERNAL, child.nEntry > MIN_KEY, [node_id = %d], [child_id = %d]\n",
+                    node->get_page_id(), child->get_page_id());
+
                 // find K_index, such that child.key[K_index] <= kEntry
                 // recusively go down.
                 node->page_write_unlock();
@@ -1582,23 +1704,33 @@ namespace DB::tree
             } // end a. child.nEntry > MIN_KEY
 
 
-            // b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
-            else
+            // b. child.nEntry = MIN_KEY, call node.branch[index+1] (if has) as R.
+            else if (index != node->nEntry_)
             {
                 link_ptr R = static_cast<link_ptr>(fetch_node(node->branch_[index + 1]));
                 R->page_write_lock();
 
+
+                debug::DEBUG_LOG(debug::ERASE_NONMIN_INTERNAL,
+                    "ERASE_NONMIN INTERNAL, child.nEntry = MIN_KEY, [node_id = %d], [child_id = %d], [R = %d]\n",
+                    node->get_page_id(), child->get_page_id(), R->get_page_id());
+
+
                 // 1) R.nEntry > MIN_KEY
                 if (R->nEntry_ > MIN_KEY_SIZE)
                 {
-                    // *steal* R.key[0] and R.branch[0] to child.
-                    // set node.key[index] = R.key[0], update parent.
+                    debug::DEBUG_LOG(debug::ERASE_NONMIN_INTERNAL,
+                        "ERASE_NONMIN INTERNAL, child.nEntry = MIN_KEY, R.nEntry > MIN_KEY, steal, [node_id = %d], [child_id = %d], [R = %d]\n",
+                        node->get_page_id(), child->get_page_id(), R->get_page_id());
+
+                    // *steal* R.branch[0] to child.branch[8]
+                    // set node.key[index] = old-R.key[0], update parent.
+                    // set child.key[7] = old-node.key[index]
                     // find K_index, recusively go down.
 
-                    // steal
-                    KeyEntry kEntry_steal = R->read_key(0);
-                    child_link->insert_key(child_link->nEntry_, kEntry_steal);
-                    child_link->branch_[child_link->nEntry_ + 1] = R->branch_[0];
+                    // *steal* R.branch[0] to child.branch[8]
+                    KeyEntry kEntry_steal_R = R->read_key(0);
+                    child_link->branch_[MIN_KEY_SIZE + 1] = R->branch_[0];
                     R->erase_key(0);
                     child_link->nEntry_++;
                     child_link->set_dirty();
@@ -1616,18 +1748,21 @@ namespace DB::tree
                     R->page_write_unlock();
                     R->unref();
 
-                    // set node.k[index], update parent.
-                    // TODO: this line can be comment.
-                    kEntry_steal = max_KeyEntry(child_link->branch_[child_link->nEntry_]);
+                    // set node.k[index] = old-R.key[0], update parent.
+                    // set L.key[MIN_KEY] = old-node.key[index]
+                    // now kEntry_steal = old-R.key[0]
+                    KeyEntry kEntry_steal_node = node->read_key(index);
                     node->erase_key(index);
-                    node->insert_key(index, kEntry_steal);
+                    node->insert_key(index, kEntry_steal_R);
                     node->set_dirty();
-                    base_ptr adopted = fetch_node(child_link->branch_[child_link->nEntry_]);
+                    // set L.key[MIN_KEY] = old-node.key[index]
+                    child_link->insert_key(MIN_KEY_SIZE, kEntry_steal_node);
+                    // update parent
+                    base_ptr adopted = fetch_node(child_link->branch_[MIN_KEY_SIZE + 1]);
                     adopted->page_write_lock();
                     adopted->set_parent_id(child_link->get_page_id());
                     adopted->page_write_unlock();
                     adopted->unref();
-
 
                     // find K_index, recusively go down.
 
@@ -1653,6 +1788,10 @@ namespace DB::tree
                 // 2) R.nEntry = MIN_KEY
                 else
                 {
+                    debug::DEBUG_LOG(debug::ERASE_NONMIN_INTERNAL,
+                        "ERASE_NONMIN INTERNAL, child.nEntry = MIN_KEY, R.nEntry = MIN_KEY, merge, [node_id = %d], [child_id = %d], [R = %d]\n",
+                        node->get_page_id(), child->get_page_id(), R->get_page_id());
+
                     // *merge* child and R into child.
                     //     move R.key[0..6] -> child.key[8..14], R.br[0..7] -> L.br[8..15], update parent_id
                     //     move noed.key[index] -> child.key[7]
@@ -1684,6 +1823,126 @@ namespace DB::tree
 
 
             } // end b. child.nEntry = MIN_KEY, call node.branch[index+1] as R.
+
+
+            // c. child.nEntry = MIN_KEY, call node.branch[index-1] as L.
+            else
+            {
+                link_ptr L = static_cast<link_ptr>(fetch_node(node->branch_[index - 1]));
+                L->page_write_lock();
+
+
+                debug::DEBUG_LOG(debug::ERASE_NONMIN_INTERNAL,
+                    "ERASE_NONMIN INTERNAL, child.nEntry = MIN_KEY, [node_id = %d], [child_id = %d], [L = %d]\n",
+                    node->get_page_id(), child->get_page_id(), L->get_page_id());
+
+
+                // 1) L.nEntry > MIN_KEY
+                if (L->nEntry_ > MIN_KEY_SIZE)
+                {
+                    debug::DEBUG_LOG(debug::ERASE_NONMIN_INTERNAL,
+                        "ERASE_NONMIN INTERNAL, child.nEntry = MIN_KEY, L.nEntry > MIN_KEY, steal, [node_id = %d], [child_id = %d], [L = %d]\n",
+                        node->get_page_id(), child->get_page_id(), L->get_page_id());
+
+                    // *steal* L.branch[L.nEntry] to child.branch[0]
+                    // set child.key[0] = node.key[index-1], update parent.
+                    // set node.key[index-1] = old-L.key[L.nEntry-1]
+                    // find K_index, recusively go down.
+
+                    // child shift right
+                    child_link->nEntry_++;
+                    child_link->branch_[MIN_KEY_SIZE + 1] = child_link->branch_[MIN_KEY_SIZE];
+                    for (uint32_t i = MIN_KEY_SIZE; i > 0; i--)
+                    {
+                        child_link->keys_[i] = child_link->keys_[i - 1];
+                        child_link->branch_[i] = child_link->branch_[i - 1];
+                    }
+
+                    // *steal* L.branch[L.nEntry] to child.branch[0]
+                    child_link->branch_[0] = L->branch_[L->nEntry_];
+                    L->nEntry_--;
+                    KeyEntry kEntry_steal_L = L->read_key(L->nEntry_);
+                    L->erase_key(L->nEntry_);
+                    child_link->set_dirty();
+                    L->set_dirty();
+
+                    // set child.key[0] = node.key[index-1], update parent.
+                    KeyEntry kEntry_steal_node = node->read_key(index - 1);
+                    child->insert_key(0, kEntry_steal_node);
+                    // update parent
+                    base_ptr adopted = fetch_node(child_link->branch_[0]);
+                    adopted->page_write_lock();
+                    adopted->set_parent_id(child_link->get_page_id());
+                    adopted->page_write_unlock();
+                    adopted->unref();
+
+                    // set node.key[index-1] = old-L.key[L.nEntry-1]
+                    node->erase_key(index - 1);
+                    node->insert_key(index - 1, kEntry_steal_L);
+                    node->set_dirty();
+
+                    L->page_write_unlock();
+                    L->unref();
+
+                    // find K_index, recusively go down.
+
+                    node->page_write_unlock();
+                    node->page_read_lock();
+
+                    uint32_t K_index = 0;
+                    for (; K_index < child_link->nEntry_; K_index++)
+                        if (key_compare(kEntry, child_link, K_index) <= 0)
+                            break;
+                    base_ptr child_child = fetch_node(child_link->branch_[K_index]);
+                    // hold child write-lock
+                    uint32_t erase_return = ERASE_NONMIN(child_link, K_index, child_child, kEntry);
+                    child_child->unref();
+
+                    node->page_read_unlock();
+
+                    return erase_return;
+
+                } // end L.nEntry > MIN_KEY
+
+
+                // 2) L.nEntry = MIN_KEY
+                else
+                {
+                    debug::DEBUG_LOG(debug::ERASE_NONMIN_INTERNAL,
+                        "ERASE_NONMIN INTERNAL, child.nEntry = MIN_KEY, L.nEntry = MIN_KEY, merge, [node_id = %d], [child_id = %d], [L = %d]\n",
+                        node->get_page_id(), child->get_page_id(), L->get_page_id());
+
+                    // *merge* L and child into child.
+                    //     move child.key[0..6] -> L.key[8..14], child.br[0..7] -> L.br[8..15], update parent_id
+                    //     move noed.key[index-1] -> L.key[7]
+                    //     adjust node.key and node.branch
+                    // find K_index, recusively go down.
+
+                    merge_internal(node, index, L, child_link);
+                    child_link->page_write_unlock();
+
+                    // find K_index, recusively go down.
+
+                    node->page_write_unlock();
+                    node->page_read_lock();
+
+                    uint32_t K_index = 0;
+                    for (; K_index < L->nEntry_; K_index++)
+                        if (key_compare(kEntry, L, K_index) <= 0)
+                            break;
+                    base_ptr child_child = fetch_node(L->branch_[K_index]);
+                    // hold L write-lock
+                    uint32_t erase_return = ERASE_NONMIN(L, K_index, child_child, kEntry);
+                    child_child->unref();
+
+                    node->page_read_unlock();
+                    L->unref(); // here special, since no caller
+
+                    return erase_return;
+
+                } // end L.nEntry = MIN_KEY
+
+            } // end c. child.nEntry = MIN_KEY, call node.branch[index-1] as L.
 
 
         } // end II. child is INTERNAL

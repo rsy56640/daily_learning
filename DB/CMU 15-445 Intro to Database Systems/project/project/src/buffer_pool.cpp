@@ -24,8 +24,15 @@ namespace DB::buffer
         debug::DEBUG_LOG(debug::BUFFER_FETCH, "BufferPoolManager::FetchPage() fetch %d\n", page_id);
         if (page_id == NOT_A_PAGE) return nullptr;
         Page* page_ptr = hash_lru_.find(page_id);
+        if (page_ptr != nullptr && page_ptr->get_page_id() > 1000) {
+            debug::DEBUG_LOG(debug::BUFFER_FETCH,
+                "error: page_id = %d",
+                page_ptr->get_page_id());
+        }
         if (page_ptr != nullptr) return page_ptr;
-        debug::DEBUG_LOG(debug::BUFFER_FETCH, "BufferPoolManager::FetchPage() does not fetch, read page %d\n", page_id);
+        debug::DEBUG_LOG(debug::BUFFER_FETCH,
+            "BufferPoolManager::FetchPage() does not fetch, read page %d\n",
+            page_id);
         // UNDONE: if invalid page_id
         return nullptr;
         char buffer[page::PAGE_SIZE];
@@ -47,9 +54,14 @@ namespace DB::buffer
     }
 
 
-    Page* BufferPoolManager::NewPage(PageInitInfo info) {
-
+    Page* BufferPoolManager::NewPage(PageInitInfo info)
+    {
         const page_id_t page_id = disk_manager_->AllocatePage();
+
+        debug::DEBUG_LOG(debug::BUFFER_NEW,
+            "BufferPoolManager::NewPage() page_id = %d, page_t = %s\n",
+            page_id, page::page_t_str[static_cast<int>(info.page_t)]);
+
         Page* page_ptr;
         switch (info.page_t)
         {

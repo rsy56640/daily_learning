@@ -30,7 +30,7 @@ namespace DB::page
             else
                 write_int(data_ + offset::PARENT_PAGE_ID, parent_id_);
             write_int(data_ + offset::NENTRY, nEntry_);
-            dirty_ = true;
+            set_dirty();
         }
     }
 
@@ -72,7 +72,7 @@ namespace DB::page
 
     void Page::set_parent_id(page_id_t parent_id) noexcept {
         parent_id_ = parent_id;
-        dirty_ = true;
+        set_dirty();
     }
 
     char* Page::get_data() noexcept {
@@ -81,6 +81,7 @@ namespace DB::page
 
     void Page::set_dirty() noexcept {
         dirty_ = true;
+        // TODO: maybe dirty-bitmap for log
     }
 
     bool Page::is_dirty() noexcept {
@@ -91,6 +92,7 @@ namespace DB::page
         if (dirty_)
             disk_manager_->WritePage(page_id_, data_);
         dirty_ = false;
+        // TODO: maybe dirty-bitmap for log
     }
 
     bool Page::try_page_read_lock() {
@@ -220,7 +222,7 @@ namespace DB::page
                 MAX_STR_LEN > kEntry.key_str.size() ? kEntry.key_str.size() : MAX_STR_LEN;
             std::memcpy(data_ + offset + 1, kEntry.key_str.c_str(), min_size);
         }
-        dirty_ = true;
+        set_dirty();
     }
 
 
@@ -232,7 +234,7 @@ namespace DB::page
             const uint32_t offset = keys_[index];
             data_[offset] = static_cast<char>(key_str_state::OBSOLETE);
         }
-        dirty_ = true;
+        set_dirty();
     }
 
 
@@ -306,7 +308,7 @@ namespace DB::page
 
     uint32_t ValuePage::write_content(const ValueEntry& vEntry)
     {
-        dirty_ = true;
+        set_dirty();
         // find an obsolete record.
         uint32_t index = 0;
         for (; index < BTNodeKeySize; index++)
@@ -320,7 +322,7 @@ namespace DB::page
 
     void ValuePage::erase_block(uint32_t offset) {
         data_[offset] = static_cast<char>(value_state::OBSOLETE);
-        dirty_ = true;
+        set_dirty();
     }
 
     void ValuePage::update_data() {}
@@ -371,7 +373,7 @@ namespace DB::page
     void LeafPage::insert_value(uint32_t index, const ValueEntry& vEntry)
     {
         values_[index] = value_page_->write_content(vEntry);
-        dirty_ = true;
+        set_dirty();
     }
 
     void LeafPage::erase_value(uint32_t index) {
@@ -441,7 +443,7 @@ namespace DB::page
     void RootPage::insert_value(uint32_t index, const ValueEntry& vEntry)
     {
         values_[index] = value_page_->write_content(vEntry);
-        dirty_ = true;
+        set_dirty();
     }
 
     void RootPage::erase_value(uint32_t index) {

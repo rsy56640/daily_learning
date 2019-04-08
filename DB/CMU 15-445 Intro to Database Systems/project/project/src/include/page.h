@@ -25,6 +25,14 @@ namespace DB::page
         //lock_byte,
     };
 
+    static const char* page_t_str[] = {
+        "ROOT_INTERNAL",
+        "ROOT_LEAF",
+        "INTERNAL",
+        "LEAF",
+        "VALUE",
+    };
+
     // use 32 bit integer to represent the page_id.
     // page_id must start from 1.
     using page_id_t = uint32_t;
