@@ -39,6 +39,8 @@ namespace DB::page
     }
 
     void Page::ref() {
+        debug::DEBUG_LOG(debug::PAGE_REF, "page_id %d ref %d -> %d\n",
+            this->get_page_id(), ref_count_.load(), ref_count_.load() + 1);
         ref_count_++;
     }
 

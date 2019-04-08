@@ -61,18 +61,18 @@ void test()
 
     KVEntry kv = { key ,value };
 
-    constexpr int key_test_insert_size = 300;
-    constexpr int key_test_erase_size = 300;
-    constexpr int key_test_find_size = 256;
+    constexpr int key_test_insert_size = 127;
+    constexpr int key_test_erase_size = 666;
+    constexpr int key_test_find_size = 128;
     constexpr int rand_seed = 19260817;
     srand(time(0) + rand_seed);
 
     std::vector<int> keys(key_test_insert_size);
     for (int i = 0; i < key_test_insert_size; i++)
         keys[i] = i;
-    //std::random_device rd;
-    //std::mt19937 g(rd());
-    //std::shuffle(keys.begin(), keys.end(), g);
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(keys.begin(), keys.end(), g);
 
     int find_error = 0, insert_error = 0, erase_error = 0;
 
@@ -99,7 +99,6 @@ void test()
     //
     for (int i = 0; i < key_test_erase_size; i++)
     {
-        bt.debug_page(1);
         cout << endl;
         key.key_int = ((rand() % key_test_insert_size) + key_test_insert_size) % key_test_insert_size;
         int ret1 = bt.erase(key);

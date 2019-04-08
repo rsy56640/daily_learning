@@ -4,6 +4,7 @@
 #include "include/page.h"
 #include "include/debug_log.h"
 #include <cstring>
+#include <string>
 
 // UNDONE: read-write lock, does 1 operation holds just 2 locks at one time?
 //                                        or holds a sequence of locks from root to bottom?
@@ -218,9 +219,6 @@ namespace DB::tree
             {
                 bool child_L = true;
                 base_ptr child, other_child;
-                debug::DEBUG_LOG(debug::ERASE_ROOT_INTERNAL,
-                    "root 2 child is %d, %d\n",
-                    root->branch_[0], root->branch_[1]);
                 if (key_compare(kEntry, root, 0) <= 0) {
                     child = fetch_node(root->branch_[0]);
                     other_child = fetch_node(root->branch_[1]);
@@ -334,6 +332,10 @@ namespace DB::tree
                                     child_leaf->insert_value(child_leaf->nEntry_, vEntry_steal);
                                     child_leaf->nEntry_++;
 
+                                    // set root.key[0]
+                                    root->erase_key(0);
+                                    root->insert_key(0, kEntry_steal);
+
                                     // shift left
                                     other_child_leaf->erase_key(0);
                                     other_child_leaf->erase_value(0);
@@ -374,6 +376,11 @@ namespace DB::tree
                                     other_child_leaf->erase_value(L_nEntry - 1);
                                     other_child_leaf->nEntry_--;
 
+                                    // set root.key[0]
+                                    kEntry_steal = other_child->read_key(L_nEntry - 2);
+                                    root->erase_key(0);
+                                    root->insert_key(0, kEntry_steal);
+
                                 } // end steal from left.k-v[nEntry-1]
 
                                 other_child_leaf->set_dirty();
@@ -413,27 +420,33 @@ namespace DB::tree
                                 R = child_leaf;
                             }
 
+
+                            debug_page(debug::MERGE_LEAF, root->get_page_id());
+                            debug_page(debug::MERGE_LEAF, L->get_page_id());
+                            debug_page(debug::MERGE_LEAF, R->get_page_id());
+
+
                             root->page_t_ = page_t_t::ROOT_LEAF;
 
                             // delete root.k[0]
                             root->erase_key(0);
 
                             // L.k-v[0..6] to root.k-v[0..6], R.k-v[0..6] to root.k-v[7-13]
-                            KeyEntry kEntry;
-                            ValueEntry vEntry;
+                            KeyEntry kEntry_steal;
+                            ValueEntry vEntry_steal;
                             for (uint32_t index = 0; index < MIN_KEY_SIZE; index++)
                             {
-                                kEntry = L->read_key(index);
-                                L->read_value(index, vEntry);
-                                root->insert_key(index, kEntry);
-                                root->insert_value(index, vEntry);
+                                kEntry_steal = L->read_key(index);
+                                L->read_value(index, vEntry_steal);
+                                root->insert_key(index, kEntry_steal);
+                                root->insert_value(index, vEntry_steal);
                                 L->erase_key(index);    // maybe ununsed
                                 L->erase_value(index);  // maybe ununsed
 
-                                kEntry = R->read_key(index);
-                                R->read_value(index, vEntry);
-                                root->insert_key(index + MIN_KEY_SIZE, kEntry);
-                                root->insert_value(index + MIN_KEY_SIZE, vEntry);
+                                kEntry_steal = R->read_key(index);
+                                R->read_value(index, vEntry_steal);
+                                root->insert_key(index + MIN_KEY_SIZE, kEntry_steal);
+                                root->insert_value(index + MIN_KEY_SIZE, vEntry_steal);
                                 R->erase_key(index);    // maybe ununsed
                                 R->erase_value(index);  // maybe ununsed
                             }
@@ -443,6 +456,8 @@ namespace DB::tree
                             child->page_write_unlock();
                             child->unref();
                             other_child->unref();
+
+                            debug_page(debug::MERGE_LEAF, root->get_page_id());
 
                             // directly delete
                             uint32_t K_index = 0;
@@ -469,7 +484,6 @@ namespace DB::tree
 
                                 return ERASE_KV;
                             }
-
 
                         } // end other-child.nEntry = MIN_KEY (aka. merge to ROOT_LEAF)
 
@@ -619,18 +633,10 @@ namespace DB::tree
                                 adopted->page_write_unlock();
                                 adopted->unref();
 
-                                // sepcial swap to view child as L below
-                                base_ptr temp = other_child;
-                                other_child = child;
-                                child = temp; // now child points to L
-
                             } // end child is right, steal left.k[nEntry-1], br[nEntry]
 
-                            //
-                            // NB: now child points to L
-                            //
+                            // now child is NONMIN
 
-                            // hold child write-lock
                             other_child->page_write_unlock();
                             other_child->unref();
 
@@ -642,13 +648,14 @@ namespace DB::tree
                             for (; K_index < child_link->nEntry_; K_index++)
                                 if (key_compare(kEntry, child_link, K_index) <= 0)
                                     break;
+                            // hold child write-lock
                             base_ptr child_child = fetch_node(child_link->branch_[K_index]);
                             uint32_t erase_return = ERASE_NONMIN(child_link, K_index, child_child, kEntry);
                             child_child->unref();
 
                             root->page_read_unlock();
 
-                            child_link->unref(); // here special, since no caller
+                            child->unref(); // here special, since no caller
 
                             return erase_return;
 
@@ -1285,6 +1292,10 @@ namespace DB::tree
             "merge_internal [node_id = %d], [merge_index = %d], [L = %d], [R = %d]\n",
             node->get_page_id(), merge_index, L->get_page_id(), R->get_page_id());
 
+        debug_page(debug::MERGE_INTERNAL, node->get_page_id());
+        debug_page(debug::MERGE_INTERNAL, L->get_page_id());
+        debug_page(debug::MERGE_INTERNAL, R->get_page_id());
+
         // move R.key[0..6] -> L.key[8..14], R.br[0..7] -> L.br[8..15], update parent_id
         KeyEntry kEntry;
         for (uint32_t R_index = 0; R_index < KEY_MIDEIUM; R_index++) // [0..6]
@@ -1324,6 +1335,9 @@ namespace DB::tree
         }
         node->set_dirty();
 
+        debug_page(debug::MERGE_INTERNAL, node->get_page_id());
+        debug_page(debug::MERGE_INTERNAL, L->get_page_id());
+        debug::DEBUG_LOG(debug::MERGE_INTERNAL, "merge_internal end\n");
     }
 
 
@@ -1337,6 +1351,10 @@ namespace DB::tree
         debug::DEBUG_LOG(debug::MERGE_LEAF,
             "merge_leaf [node_id = %d], [merge_index = %d], [L = %d], [R = %d]\n",
             node->get_page_id(), merge_index, L->get_page_id(), R->get_page_id());
+
+        debug_page(debug::MERGE_LEAF, node->get_page_id());
+        debug_page(debug::MERGE_LEAF, L->get_page_id());
+        debug_page(debug::MERGE_LEAF, R->get_page_id());
 
         // move R.k-v[0..6] -> L.k-v[7.13], adjust relation
         KeyEntry kEntry;
@@ -1381,6 +1399,9 @@ namespace DB::tree
         }
         node->set_dirty();
 
+        debug_page(debug::MERGE_LEAF, node->get_page_id());
+        debug_page(debug::MERGE_LEAF, L->get_page_id());
+        debug::DEBUG_LOG(debug::MERGE_LEAF, "merge_leaf end\n");
     }
 
 
@@ -1918,7 +1939,7 @@ namespace DB::tree
                     //     adjust node.key and node.branch
                     // find K_index, recusively go down.
 
-                    merge_internal(node, index, L, child_link);
+                    merge_internal(node, index - 1, L, child_link);
                     child_link->page_write_unlock();
 
                     // find K_index, recusively go down.
@@ -1954,10 +1975,10 @@ namespace DB::tree
     void BTree::debug() const {
         const page_id_t cur_page_id = storage_engine_->disk_manager_->get_cut_page_id();
         for (page_id_t i = 1; i <= cur_page_id; i++)
-            debug_page(i);
+            debug_page(true, i);
     }
-    void BTree::debug_page(page_id_t page_id) const {
-        debug::debug_page(page_id, this->buffer_pool_);
+    void BTree::debug_page(bool config, page_id_t page_id) const {
+        debug::debug_page(config, page_id, this->buffer_pool_);
     }
 
 

@@ -11,21 +11,27 @@ namespace DB::debug
         PAGE_REF = false,
         LRU_EVICT = true,
         BT_CREATE = true,
+
         BUFFER_FETCH = true,
         BUFFER_FLUSH = true,
         BUFFER_NEW = true,
         BUFFER_DELETE = true,
+
         SPLIT_ROOT_INTERNAL = true,
         SPLIT_ROOT_LEAF = true,
         SPLIT_INTERNAL = true,
         SPLIT_LEAF = true,
+
         MERGE_INTERNAL = true,
         MERGE_LEAF = true,
+
         ERASE_ROOT_LEAF = true,
         ERASE_ROOT_INTERNAL = true,
         ERASE_NONMIN_LEAF = true,
         ERASE_NONMIN_INTERNAL = true,
-        _ = true;
+
+        NON_DEBUG = false,
+        DEBUG = true;
 
     static const char* debug_output = "./debug_output.txt";
 
@@ -40,7 +46,7 @@ namespace DB::debug
         std::printf(format, args...);
     }
 
-    void debug_page(const page::page_id_t, buffer::BufferPoolManager*);
+    void debug_page(bool config, const page::page_id_t, buffer::BufferPoolManager*);
     void debug_leaf(const page::LeafPage* leaf);
     void debug_internal(const page::InternalPage* link);
     void debug_value(const page::ValuePage*);

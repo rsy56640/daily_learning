@@ -73,7 +73,7 @@ namespace DB::tree
 
 
         void debug() const;
-        void debug_page(page_id_t) const;
+        void debug_page(bool config, page_id_t) const;
 
 
         uint32_t size() const;

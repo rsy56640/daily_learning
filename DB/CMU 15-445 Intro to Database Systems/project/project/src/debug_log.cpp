@@ -38,8 +38,10 @@ namespace DB::debug
     }();
     */
 
-    void debug_page(const page::page_id_t page_id, buffer::BufferPoolManager* buffer_pool)
+    void debug_page(bool config, const page::page_id_t page_id, buffer::BufferPoolManager* buffer_pool)
     {
+        if (!config) return;
+
         printf("---------------------------------------------------\n");
         printf("[page_id = %d]\n", page_id);
         using namespace page;
