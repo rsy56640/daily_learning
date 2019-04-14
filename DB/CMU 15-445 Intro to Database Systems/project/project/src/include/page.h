@@ -14,6 +14,8 @@ namespace DB::buffer { class BufferPoolManager; }
 namespace DB::page
 {
 
+    constexpr uint32_t PAGE_SIZE = 1 << 10; // 1KB
+
     class Page;
     Page* buffer_to_page(const char(&buffer)[page::PAGE_SIZE]);
     class DBMetaPage;
@@ -29,7 +31,6 @@ namespace DB::page
     LeafPage* parse_LeafPage(const char(&buffer)[page::PAGE_SIZE]);
     RootPage* parse_RootPage(const char(&buffer)[page::PAGE_SIZE]);
 
-    constexpr uint32_t PAGE_SIZE = 1 << 10; // 1KB
 
     enum class page_t_t :uint32_t {
         DB_META,
@@ -74,7 +75,7 @@ namespace DB::page
             // Table meta
             BT_ROOT_ID = 8,
             DEFAULT_VALUE_PAGE_ID = 12,
-
+            COLUMN_NAME_STR_START = 226,
 
             // BTree Page / Value Page
             PARENT_PAGE_ID = 8,
@@ -190,25 +191,39 @@ namespace DB::page
     //
     // TableMetaPage
     //
-    enum col_t_t { INTEGER, CHAR, VARCHAR };
-    enum constraint_t_t { PK = 1, FK = 2, NOT_NULL = 4, DEFAULT = 8, };
+    enum class col_t_t { INTEGER, CHAR, VARCHAR };
+    struct constraint_t_t { enum { PK = 1, FK = 2, NOT_NULL = 4, DEFAULT = 8, }; };
+
+    enum class value_state :char { OBSOLETE, INUSED };
+    constexpr uint32_t MAX_TUPLE_SIZE = 67u;
+    constexpr uint32_t TUPLE_BLOCK_SIZE = 68u;
+    // NB: *** tuple size <= 67B ***
+    struct ValueEntry {
+        value_state value_state_ = value_state::OBSOLETE;
+        char content_[MAX_TUPLE_SIZE] = { 0 };        // 67B
+    };
+
     class TableMetaPage : public Page {
     public:
-        static constexpr uint32_t TABLE_NAME_STR_BLOCK = 25;
-        static constexpr uint32_t MAX_TABLE_NAME_STR = 24;
+        static constexpr uint32_t COLUMN_NAME_STR_BLOCK = 51;
+        static constexpr uint32_t MAX_COLUMN_NAME_STR = 50;
         static constexpr uint32_t MAX_COLUMN_NUM = 15;
 
         struct ColumnInfo {
             uint32_t col_name_offset_;
             col_t_t col_t_;
-            uint32_t str_len_;      // used when col_t_ = `CHAR` or `VARCHAR`
-            constraint_t_t constraint_t_;
+            uint16_t str_len_;      // used when col_t_ = `CHAR` or `VARCHAR`
+            uint16_t constraint_t_;
             uint32_t other_value_;  // table_id     if constraint_t_ = `FK`
                                     // value_offset if constraint_t_ = `DEFAULT`
             bool isPK() const noexcept { return constraint_t_ & constraint_t_t::PK; }
             bool isFK() const noexcept { return constraint_t_ & constraint_t_t::FK; }
             bool isNOT_NULL() const noexcept { return constraint_t_ & constraint_t_t::NOT_NULL; }
             bool isDEFAULT() const noexcept { return constraint_t_ & constraint_t_t::DEFAULT; }
+            void setPK() { constraint_t_ |= constraint_t_t::PK; }
+            void setFK() { constraint_t_ |= constraint_t_t::FK; }
+            void setNOT_NULL() { constraint_t_ |= constraint_t_t::NOT_NULL; }
+            void setDEFAULT() { constraint_t_ |= constraint_t_t::DEFAULT; }
         };
 
         TableMetaPage(buffer::BufferPoolManager* buffer_pool, page_t_t, page_id_t,
@@ -223,14 +238,18 @@ namespace DB::page
         bool is_default_col(const std::string& col_name) const;
         ValueEntry get_default_value(const std::string& col_name) const;
 
+        // onlt used when creating table
+        void insert_column(const std::string&, ColumnInfo*);
+
+        virtual void update_data();
 
     public:
-        const page_id_t BT_root_id_;
-        const uint32_t col_num_;
-        const page_id_t default_value_page_id_;
+        page_id_t BT_root_id_;
+        uint32_t col_num_;
+        page_id_t default_value_page_id_;
         ValuePage* value_page_;
-        ColumnInfo* cols_;
         std::unordered_map<std::string, ColumnInfo*> col_name2col_;
+        tree::BTree* bt_;
     };
 
     //////////////////////////////////////////////////////////////////////
@@ -356,17 +375,6 @@ namespace DB::page
     // each record is 68B :), so it's trivial to handle.
     // 15 * 68 < PAGE_SIZE
     // the state mark is used when deleted, and when do inserttion, find the `OBSOLETE` entry.
-    enum class value_state :char { OBSOLETE, INUSED };
-    constexpr uint32_t MAX_TUPLE_SIZE = 67u;
-    constexpr uint32_t TUPLE_BLOCK_SIZE = 68u;
-
-    struct ValueEntry {
-        value_state value_state_ = value_state::OBSOLETE;
-        char content_[MAX_TUPLE_SIZE] = { 0 };        // 67B
-    };
-
-    // NB: *** tuple size <= 67B ***
-    // NO '\0' at end !!!
     class ValuePage :public Page {
     public:
         ValuePage(page_id_t, page_id_t, uint32_t nEntry, disk::DiskManager*, bool isInit);

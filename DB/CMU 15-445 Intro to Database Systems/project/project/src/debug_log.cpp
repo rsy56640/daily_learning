@@ -51,8 +51,7 @@ namespace DB::debug
             printf("---------------------------------------------------\n");
             return;
         }
-        printf("[parent_page_id = %d]\n", node->get_parent_id());
-        printf("[nEntry = %d]\n", node->get_nEntry());
+
         switch (node->get_page_t())
         {
         case page_t_t::INTERNAL:
@@ -75,6 +74,8 @@ namespace DB::debug
 
     void debug_leaf(const page::LeafPage* leaf)
     {
+        printf("[parent_page_id = %d]\n", leaf->get_parent_id());
+        printf("[nEntry = %d]\n", leaf->get_nEntry());
         printf("[page_t = LeafPage]\n");
         printf("[ValuePage_id = %d]\n", leaf->value_page_id_);
         printf("[keys]: ");
@@ -86,6 +87,8 @@ namespace DB::debug
 
     void debug_internal(const page::InternalPage* link)
     {
+        printf("[parent_page_id = %d]\n", link->get_parent_id());
+        printf("[nEntry = %d]\n", link->get_nEntry());
         printf("[page_t = InternalPage]\n");
         printf("[keys]: ");
         std::copy(link->keys_, link->keys_ + link->get_nEntry(),
@@ -97,13 +100,17 @@ namespace DB::debug
         printf("\n");
     }
 
-    void debug_value(const page::ValuePage*)
+    void debug_value(const page::ValuePage* value_page)
     {
+        printf("[parent_page_id = %d]\n", value_page->parent_id_);
+        printf("[nEntry = %d]\n", value_page->nEntry_);
         printf("[page_t = ValuePage]\n");
     }
 
     void debug_root(const page::RootPage* root)
     {
+        printf("[parent_page_id = %d]\n", root->get_parent_id());
+        printf("[nEntry = %d]\n", root->get_nEntry());
         if (root->get_page_t() == page::page_t_t::ROOT_INTERNAL)
         {
             printf("[page_t = ROOT_INTERNAL]\n");

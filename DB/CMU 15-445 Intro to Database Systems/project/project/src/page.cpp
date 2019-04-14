@@ -2,6 +2,7 @@
 #include "include/disk_manager.h"
 #include "include/buffer_pool.h"
 #include "include/debug_log.h"
+#include "include/BplusTree.h"
 #include <cstring>
 #include <vector>
 
@@ -303,16 +304,22 @@ namespace DB::page
         col_num_(col_num),
         default_value_page_id_(default_value_page_id)
     {
-        cols_ = new ColumnInfo[col_num];
-        value_page_ = static_cast<ValuePage*>(buffer_pool->FetchPage(default_value_page_id_));
-        buffer_pool->DeletePage(default_value_page_id_);
+        if (!isInit) {
+            value_page_ = static_cast<ValuePage*>(buffer_pool->FetchPage(default_value_page_id_));
+            buffer_pool->DeletePage(default_value_page_id_);
+        }
+        else {
+            // create B+Tree
+
+        }
     }
 
 
     TableMetaPage::~TableMetaPage()
     {
         value_page_->unref();
-        delete[] cols_;
+        for (auto&[k, v] : col_name2col_)
+            delete v;
     }
 
 
@@ -345,7 +352,7 @@ namespace DB::page
         auto it = col_name2col_.find(col_name);
         if (it == col_name2col_.end())
             return {};
-        const ColumnInfo* col = it->second;
+        const TableMetaPage::ColumnInfo* col = it->second;
         if (!col->isDEFAULT())
             return {};
         ValueEntry vEntry;
@@ -354,6 +361,22 @@ namespace DB::page
         return vEntry;
     }
 
+
+    void TableMetaPage::insert_column(const std::string& col_name, ColumnInfo* col) {
+        col_name2col_[col_name] = col;
+        col_num_++;
+        if (col_name.size() > MAX_COLUMN_NAME_STR)
+        {
+            debug::ERROR_LOG("col name size is invalid: \"%s\"\n", col_name.c_str());
+            return;
+        }
+        set_dirty();
+    }
+
+
+    void TableMetaPage::update_data() {
+
+    }
 
 
     //////////////////////////////////////////////////////////////////////
@@ -387,8 +410,8 @@ namespace DB::page
     }
 
     void write_short(char* data, uint16_t value) {
-        data[0] = value;
-        data[1] = value >> 8;
+        data[0] = static_cast<char>(value);
+        data[1] = static_cast<char>(value >> 8);
     }
 
     char read_char(const char* s) {
