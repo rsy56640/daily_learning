@@ -11,32 +11,23 @@ namespace DB::buffer
 
     page::Page* BufferPoolManager::FetchPage(page_id_t page_id)
     {
-        // UNDONE: there might be UB
-        // suppose you fetch a Page, but later evict.
-        // you want to lock the Page,
-        // however, in other execution, you fetch the Page again.
-        // thus data might be corruped!!!
-        //
-        // HACK: maybe we can use some transcation level technique
-        //       to avoid accessing the same page at the same time.
-        //       But what if the page is evicted and accessed again in the same txn???
-        // TODO: in the worst case, the handling of the same page should be serialized.
+        // if the page is not in BufferPool but resides in memory, the page musy be dirty.
+        // wait until the page is removed from dirty_page_set.
         debug::DEBUG_LOG(debug::BUFFER_FETCH, "BufferPoolManager::FetchPage() fetch %d\n", page_id);
         if (page_id == NOT_A_PAGE) return nullptr;
         Page* page_ptr = hash_lru_.find(page_id);
-        if (page_ptr != nullptr && page_ptr->get_page_id() > 1000) {
-            debug::DEBUG_LOG(debug::BUFFER_FETCH,
-                "error: page_id = %d",
-                page_ptr->get_page_id());
-        }
         if (page_ptr != nullptr) return page_ptr;
         debug::DEBUG_LOG(debug::BUFFER_FETCH,
-            "BufferPoolManager::FetchPage() does not fetch, read page %d\n",
+            "BufferPoolManager::FetchPage() does not fetch, maybe wait for reading page %d\n",
             page_id);
-        // UNDONE: if invalid page_id
-        return nullptr;
         char buffer[page::PAGE_SIZE];
-        disk_manager_->ReadPage(page_id, buffer);
+        while (!disk_manager_->ReadPage(page_id, buffer)) {
+            page_ptr = hash_lru_.find(page_id);
+            if (page_ptr != nullptr) return page_ptr;
+            debug::DEBUG_LOG(debug::BUFFER_FETCH,
+                "BufferPoolManager::FetchPage() does not fetch, maybe wait for reading page %d\n",
+                page_id);
+        }
         page_ptr = buffer_to_page(buffer);
         hash_lru_.insert(page_ptr->get_page_id(), page_ptr);
         page_ptr->ref();
@@ -104,13 +95,8 @@ namespace DB::buffer
     }
 
 
-    Page* BufferPoolManager::buffer_to_page(const char(&buffer)[page::PAGE_SIZE]) {
-        // TODO: BufferPoolManager::buffer_to_page()
-        // read page-info metadata
-        PageInitInfo info;
-        Page* page_ptr = nullptr;
-
-        return page_ptr;
+    void BufferPoolManager::flush() {
+        hash_lru_.flush();
     }
 
 

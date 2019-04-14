@@ -84,6 +84,8 @@ namespace DB::buffer
 
         uint32_t max_size() const;
 
+        void flush();
+
 
     private:
         uint32_t bucket_num_;                       // the modification only in `rehash()`

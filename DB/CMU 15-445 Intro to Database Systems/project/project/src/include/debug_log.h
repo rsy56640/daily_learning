@@ -37,12 +37,13 @@ namespace DB::debug
 
 
     template<typename ...Arg>
-    void DEBUG_LOG(bool config, const char* format, Arg... args) {
+    inline void DEBUG_LOG(bool config, const char* format, Arg... args) {
         if (config) std::printf(format, args...);
     }
 
     template<typename ...Arg>
-    void ERROR_LOG(const char* format, Arg... args) {
+    inline void ERROR_LOG(const char* format, Arg... args) {
+        std::printf("ERROR: ");
         std::printf(format, args...);
     }
 

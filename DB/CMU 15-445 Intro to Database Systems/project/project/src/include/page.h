@@ -5,6 +5,7 @@
 #include <shared_mutex>
 #include <atomic>
 #include <string>
+#include <unordered_map>
 #include "env.h"
 
 namespace DB::disk { class DiskManager; }
@@ -13,19 +14,38 @@ namespace DB::buffer { class BufferPoolManager; }
 namespace DB::page
 {
 
+    class Page;
+    Page* buffer_to_page(const char(&buffer)[page::PAGE_SIZE]);
+    class DBMetaPage;
+    class TableMetaPage;
+    class InternalPage;
+    class ValuePage;
+    class LeafPage;
+    class RootPage;
+    DBMetaPage* parse_DBMetaPage(const char(&buffer)[page::PAGE_SIZE]);
+    TableMetaPage* parse_TableMetaPage(const char(&buffer)[page::PAGE_SIZE]);
+    InternalPage* parse_InternalPage(const char(&buffer)[page::PAGE_SIZE]);
+    ValuePage* parse_ValuePage(const char(&buffer)[page::PAGE_SIZE]);
+    LeafPage* parse_LeafPage(const char(&buffer)[page::PAGE_SIZE]);
+    RootPage* parse_RootPage(const char(&buffer)[page::PAGE_SIZE]);
+
     constexpr uint32_t PAGE_SIZE = 1 << 10; // 1KB
 
     enum class page_t_t :uint32_t {
+        DB_META,
+        TABLE_META,
+
         ROOT_INTERNAL,
         ROOT_LEAF,
         INTERNAL,
         LEAF,
         VALUE,
-        //pointer_map,
-        //lock_byte,
     };
 
     static const char* page_t_str[] = {
+        "DB_META",
+        "TABLE_META",
+
         "ROOT_INTERNAL",
         "ROOT_LEAF",
         "INTERNAL",
@@ -45,6 +65,18 @@ namespace DB::page
             // Page
             PAGE_T = 0,
             PAGE_ID = 4,
+
+            // DB meta
+            CUR_PAGE_NO = 8,
+            TABLE_NUM = 12,
+            TABLE_NAME_STR_START = 256,
+
+            // Table meta
+            BT_ROOT_ID = 8,
+            DEFAULT_VALUE_PAGE_ID = 12,
+
+
+            // BTree Page / Value Page
             PARENT_PAGE_ID = 8,
             NENTRY = 12,
 
@@ -57,8 +89,8 @@ namespace DB::page
             PREVIOUS_PAGE_ID = 24,
             NEXT_PAGE_ID = 28;
 
-
     }; // end class offset
+
 
 
     class BTreePage;
@@ -68,7 +100,7 @@ namespace DB::page
         friend class ::DB::tree::BTree;
     public:
 
-        Page(page_t_t, page_id_t, page_id_t parent_id, uint32_t nEntry, disk::DiskManager*, bool isInit);
+        Page(page_t_t, page_id_t, disk::DiskManager*, bool isInit);
 
         virtual ~Page();
 
@@ -79,12 +111,6 @@ namespace DB::page
         page_t_t get_page_t() const noexcept;
 
         page_id_t get_page_id() const noexcept;
-
-        page_id_t get_parent_id() const noexcept;
-
-        uint32_t get_nEntry() const noexcept;
-
-        void set_parent_id(page_id_t) noexcept;
 
         char* get_data() noexcept;
 
@@ -115,8 +141,6 @@ namespace DB::page
         disk::DiskManager * disk_manager_;
         page_t_t page_t_; // fundamentally const, but ROOT may violate the rule.
         const page_id_t page_id_;
-        page_id_t parent_id_;
-        uint32_t nEntry_;
         char data_[PAGE_SIZE];
         bool dirty_;
         bool discarded_;
@@ -124,6 +148,89 @@ namespace DB::page
     private:
         mutable std::shared_mutex rw_page_mutex_;
         std::atomic<uint32_t> ref_count_;
+    };
+
+
+
+    //
+    // DBMetaPage
+    //
+
+    enum str_state :char { OBSOLETE, INUSED };
+
+    class DBMetaPage :public Page {
+    public:
+
+        static constexpr uint32_t TABLE_NAME_STR_BLOCK = 25;
+        static constexpr uint32_t MAX_TABLE_NAME_STR = 24;
+        static constexpr uint32_t MAX_TABLE_NUM = 30;
+
+        DBMetaPage(page_t_t, page_id_t, disk::DiskManager*, bool isInit,
+            uint32_t cur_page_no, uint32_t table_num);
+        ~DBMetaPage();
+
+        page_id_t find_table(const std::string&);
+
+        bool create_table(page_id_t, const std::string&);
+
+        bool drop_table(const std::string&);
+
+        virtual void update_data();
+
+    public:
+        uint32_t cur_page_no_;
+        uint32_t table_num_;
+        uint32_t* table_page_ids_;
+        uint32_t* table_name_offset_;
+        std::unordered_map<std::string, page_id_t> table_name2id_;
+    };
+
+
+
+    //
+    // TableMetaPage
+    //
+    enum col_t_t { INTEGER, CHAR, VARCHAR };
+    enum constraint_t_t { PK = 1, FK = 2, NOT_NULL = 4, DEFAULT = 8, };
+    class TableMetaPage : public Page {
+    public:
+        static constexpr uint32_t TABLE_NAME_STR_BLOCK = 25;
+        static constexpr uint32_t MAX_TABLE_NAME_STR = 24;
+        static constexpr uint32_t MAX_COLUMN_NUM = 15;
+
+        struct ColumnInfo {
+            uint32_t col_name_offset_;
+            col_t_t col_t_;
+            uint32_t str_len_;      // used when col_t_ = `CHAR` or `VARCHAR`
+            constraint_t_t constraint_t_;
+            uint32_t other_value_;  // table_id     if constraint_t_ = `FK`
+                                    // value_offset if constraint_t_ = `DEFAULT`
+            bool isPK() const noexcept { return constraint_t_ & constraint_t_t::PK; }
+            bool isFK() const noexcept { return constraint_t_ & constraint_t_t::FK; }
+            bool isNOT_NULL() const noexcept { return constraint_t_ & constraint_t_t::NOT_NULL; }
+            bool isDEFAULT() const noexcept { return constraint_t_ & constraint_t_t::DEFAULT; }
+        };
+
+        TableMetaPage(buffer::BufferPoolManager* buffer_pool, page_t_t, page_id_t,
+            disk::DiskManager*, bool isInit,
+            page_id_t BT_root_id, uint32_t col_num, page_id_t default_value_page_id);
+
+        ~TableMetaPage();
+
+        bool is_PK(const std::string& col_name) const;
+        bool is_FK(const std::string& col_name) const;
+        bool is_not_null(const std::string& col_name) const;
+        bool is_default_col(const std::string& col_name) const;
+        ValueEntry get_default_value(const std::string& col_name) const;
+
+
+    public:
+        const page_id_t BT_root_id_;
+        const uint32_t col_num_;
+        const page_id_t default_value_page_id_;
+        ValuePage* value_page_;
+        ColumnInfo* cols_;
+        std::unordered_map<std::string, ColumnInfo*> col_name2col_;
     };
 
     //////////////////////////////////////////////////////////////////////
@@ -136,7 +243,11 @@ namespace DB::page
 
     uint32_t read_short(const char*);
 
-    void write_short(char*, uint32_t value);
+    void write_short(char*, uint16_t value);
+
+    char read_char(const char*);
+
+    void write_char(char*, char c);
 
     //////////////////////////////////////////////////////////////////////
     //////////////////////       B+ Tree Page       //////////////////////
@@ -168,13 +279,15 @@ namespace DB::page
     // the 1st block starts at 152u.
     constexpr uint32_t KEY_STR_BLOCK = 58u;
     constexpr uint32_t KEY_STR_START = 152u;
-    enum class key_str_state :char { OBSOLETE, INUSED };
 
     // for ROOT, INTERNAL, LEAF
     class BTreePage :public Page {
         friend class ::DB::tree::BTree;
     public:
 
+        page_id_t get_parent_id() const noexcept;
+        uint32_t get_nEntry() const noexcept;
+        void set_parent_id(page_id_t) noexcept;
         key_t_t get_key_t() const noexcept;
         uint32_t get_str_len() const noexcept;
 
@@ -195,6 +308,8 @@ namespace DB::page
             key_t_t, uint32_t str_len, bool isInit);
         ~BTreePage();
 
+        page_id_t parent_id_;
+        uint32_t nEntry_;
         const key_t_t key_t_;
         const uint32_t str_len_;
 
@@ -271,6 +386,10 @@ namespace DB::page
         // update the all metadata into memory, for the later `flush()`.
         // *** in fact, do nothing ***
         virtual void update_data();
+
+    public:
+        page_id_t parent_id_;
+        uint32_t nEntry_;
 
     }; // end class ValuePage
 

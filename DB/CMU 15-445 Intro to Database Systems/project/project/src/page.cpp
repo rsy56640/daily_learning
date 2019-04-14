@@ -8,15 +8,83 @@
 namespace DB::page
 {
 
+    Page* buffer_to_page(const char(&buffer)[page::PAGE_SIZE])
+    {
+        const char type = read_char(buffer + offset::PAGE_T);
+        switch (static_cast<page_t_t>(type))
+        {
+        case page_t_t::DB_META:
+            return parse_DBMetaPage(buffer);
+        case page_t_t::TABLE_META:
+            return parse_TableMetaPage(buffer);
+        case page_t_t::ROOT_INTERNAL:
+        case page_t_t::ROOT_LEAF:
+            return parse_RootPage(buffer);
+        case page_t_t::INTERNAL:
+            return parse_InternalPage(buffer);
+        case page_t_t::LEAF:
+            return parse_LeafPage(buffer);
+        case page_t_t::VALUE:
+            return parse_ValuePage(buffer);
+        default:
+            debug::ERROR_LOG("UNKNOWN type\n");
+            return nullptr;
+        }
+    }
+
+
+    // TODO buffer to page.
+    DBMetaPage* parse_DBMetaPage(const char(&buffer)[page::PAGE_SIZE])
+    {
+
+    }
+
+
+    TableMetaPage* parse_TableMetaPage(const char(&buffer)[page::PAGE_SIZE])
+    {
+
+
+    }
+
+
+    InternalPage* parse_InternalPage(const char(&buffer)[page::PAGE_SIZE])
+    {
+
+
+    }
+
+
+    ValuePage* parse_ValuePage(const char(&buffer)[page::PAGE_SIZE])
+    {
+
+
+    }
+
+
+    LeafPage* parse_LeafPage(const char(&buffer)[page::PAGE_SIZE])
+    {
+
+
+    }
+
+
+    RootPage* parse_RootPage(const char(&buffer)[page::PAGE_SIZE])
+    {
+
+
+    }
+
+
+
+
+
     // TODO: all ctor/dtor/update_data !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    Page::Page(page_t_t page_t, page_id_t page_id, page_id_t parent_id, uint32_t nEntry,
+    Page::Page(page_t_t page_t, page_id_t page_id,
         disk::DiskManager* disk_manager, bool isInit)
         :
         disk_manager_(disk_manager),
         page_t_(page_t),
         page_id_(page_id),
-        parent_id_(parent_id),
-        nEntry_(nEntry),
         ref_count_(0),
         dirty_(false),
         discarded_(false)
@@ -25,17 +93,13 @@ namespace DB::page
         if (!isInit) {
             write_int(data_ + offset::PAGE_T, static_cast<uint32_t>(page_t_));
             write_int(data_ + offset::PAGE_ID, page_id_);
-            if (parent_id_ == NOT_A_PAGE)
-                write_int(data_ + offset::PARENT_PAGE_ID, NOT_A_PAGE);
-            else
-                write_int(data_ + offset::PARENT_PAGE_ID, parent_id_);
-            write_int(data_ + offset::NENTRY, nEntry_);
             set_dirty();
         }
     }
 
     Page::~Page() {
-
+        if (dirty_)
+            flush();
     }
 
     void Page::ref() {
@@ -48,7 +112,7 @@ namespace DB::page
         debug::DEBUG_LOG(debug::PAGE_REF, "page_id %d ref %d -> %d\n",
             this->get_page_id(), ref_count_.load(), ref_count_.load() - 1);
         if (--ref_count_ == 0) {
-            if (dirty_) {
+            if (dirty_) { // no contend reading on `dirty_`
                 this->update_data();
                 flush();
             }
@@ -64,26 +128,13 @@ namespace DB::page
         return page_id_;
     }
 
-    page_id_t Page::get_parent_id() const noexcept {
-        return parent_id_;
-    }
-
-    uint32_t Page::get_nEntry() const noexcept {
-        return nEntry_;
-    }
-
-    void Page::set_parent_id(page_id_t parent_id) noexcept {
-        parent_id_ = parent_id;
-        set_dirty();
-    }
-
     char* Page::get_data() noexcept {
         return data_;
     }
 
     void Page::set_dirty() noexcept {
         dirty_ = true;
-        // TODO: maybe dirty-bitmap for log
+        disk_manager_->set_dirty(this->page_id_);
     }
 
     bool Page::is_dirty() noexcept {
@@ -91,10 +142,12 @@ namespace DB::page
     }
 
     void Page::flush() {
-        if (dirty_)
+        if (dirty_) {
+            update_data();
             disk_manager_->WritePage(page_id_, data_);
+        }
         dirty_ = false;
-        // TODO: maybe dirty-bitmap for log
+        // UNDONE: maybe dirty-bitmap for log
     }
 
     bool Page::try_page_read_lock() {
@@ -135,6 +188,174 @@ namespace DB::page
     }
 
 
+    //
+    // DBMetaPage
+    //
+
+    DBMetaPage::DBMetaPage(page_t_t page_t, page_id_t page_id,
+        disk::DiskManager* disk_manager, bool isInit, uint32_t cur_page_no, uint32_t table_num)
+        :
+        Page(page_t, page_id, disk_manager, isInit),
+        cur_page_no_(cur_page_no),
+        table_num_(table_num)
+    {
+        table_page_ids_ = new uint32_t[MAX_TABLE_NUM];
+        table_name_offset_ = new uint32_t[MAX_TABLE_NUM];
+        if (!isInit) {
+            // read table_name2id_
+
+        }
+    }
+
+    DBMetaPage::~DBMetaPage() {
+        delete[] table_page_ids_;
+        delete[] table_name_offset_;
+    }
+
+    page_id_t DBMetaPage::find_table(const std::string& table_name) {
+        auto it = table_name2id_.find(table_name);
+        if (it == table_name2id_.end())
+            return NOT_A_PAGE;
+        return it->second;
+    }
+
+    bool DBMetaPage::create_table(page_id_t table_page_id, const std::string& table_name)
+    {
+        if (table_name.size() > MAX_TABLE_NAME_STR)
+            return false;
+
+        // find a `OBSOLETE` record.
+        uint32_t tableNameIndex = 0;
+        for (; tableNameIndex < MAX_TABLE_NUM; tableNameIndex++)
+            if (data_[offset::TABLE_NAME_STR_START + tableNameIndex * TABLE_NAME_STR_BLOCK]
+                == static_cast<char>(str_state::OBSOLETE))
+                break;
+
+        if (tableNameIndex == MAX_TABLE_NUM) {
+            debug::ERROR_LOG("`DBMetaPage::create_table()`, might forget erase table_str somewhere");
+            return false;
+        }
+
+        const uint32_t offset = offset::TABLE_NAME_STR_START + tableNameIndex * TABLE_NAME_STR_BLOCK;
+
+        // set table_page_id
+        table_page_ids_[table_num_ - 1] = table_page_id;
+        table_name_offset_[table_num_ - 1] = offset;
+        table_num_++;
+
+        // write table_name_str
+        data_[offset] = static_cast<char>(str_state::INUSED);
+        char buffer[MAX_TABLE_NAME_STR] = { 0 };
+        std::memcpy(buffer, table_name.c_str(), table_name.size());
+        std::memcpy(data_ + offset + 1, buffer, MAX_TABLE_NAME_STR);
+
+        set_dirty();
+        return true;
+    }
+
+    bool DBMetaPage::drop_table(const std::string& table_name)
+    {
+        auto it = table_name2id_.find(table_name);
+        if (it == table_name2id_.end())
+            return false;
+
+        const page_id_t table_id = it->second;
+        uint32_t index = 0;
+        for (; index < table_num_; index++)
+            if (table_page_ids_[index] == table_id)
+                break;
+
+        const uint32_t offset = table_name_offset_[index];
+        data_[offset] = static_cast<char>(str_state::OBSOLETE);
+
+        // compact in `data_` will be done in `update_data()`
+        table_num_--;
+        for (uint32_t i = index; i < table_num_; i++)
+        {
+            table_page_ids_[i] = table_page_ids_[i + 1];
+            table_name_offset_[i] = table_name_offset_[i + 1];
+        }
+
+        set_dirty();
+        return true;
+    }
+
+
+    void DBMetaPage::update_data()
+    {
+        cur_page_no_ = disk_manager_->get_cut_page_id();
+
+
+
+    }
+
+
+
+    //
+    // TableMetaPage
+    //
+    TableMetaPage::TableMetaPage(buffer::BufferPoolManager* buffer_pool, page_t_t page_t, page_id_t page_id,
+        disk::DiskManager* disk_manager, bool isInit,
+        page_id_t BT_root_id, uint32_t col_num, page_id_t default_value_page_id)
+        :
+        Page(page_t, page_id, disk_manager, isInit),
+        BT_root_id_(BT_root_id),
+        col_num_(col_num),
+        default_value_page_id_(default_value_page_id)
+    {
+        cols_ = new ColumnInfo[col_num];
+        value_page_ = static_cast<ValuePage*>(buffer_pool->FetchPage(default_value_page_id_));
+        buffer_pool->DeletePage(default_value_page_id_);
+    }
+
+
+    TableMetaPage::~TableMetaPage()
+    {
+        value_page_->unref();
+        delete[] cols_;
+    }
+
+
+    bool TableMetaPage::is_PK(const std::string& col_name) const {
+        auto it = col_name2col_.find(col_name);
+        if (it == col_name2col_.end())
+            return false;
+        return it->second->isPK();
+    }
+    bool TableMetaPage::is_FK(const std::string& col_name) const {
+        auto it = col_name2col_.find(col_name);
+        if (it == col_name2col_.end())
+            return false;
+        return it->second->isFK();
+    }
+    bool TableMetaPage::is_not_null(const std::string& col_name) const {
+        auto it = col_name2col_.find(col_name);
+        if (it == col_name2col_.end())
+            return false;
+        return it->second->isNOT_NULL();
+    }
+    bool TableMetaPage::is_default_col(const std::string& col_name) const {
+        auto it = col_name2col_.find(col_name);
+        if (it == col_name2col_.end())
+            return false;
+        return it->second->isDEFAULT();
+    }
+
+    ValueEntry TableMetaPage::get_default_value(const std::string& col_name) const {
+        auto it = col_name2col_.find(col_name);
+        if (it == col_name2col_.end())
+            return {};
+        const ColumnInfo* col = it->second;
+        if (!col->isDEFAULT())
+            return {};
+        ValueEntry vEntry;
+        vEntry.value_state_ = value_state::INUSED;
+        value_page_->read_content(col->other_value_, vEntry);
+        return vEntry;
+    }
+
+
+
     //////////////////////////////////////////////////////////////////////
     //////////////////////           util           //////////////////////
     //////////////////////////////////////////////////////////////////////
@@ -165,11 +386,18 @@ namespace DB::page
         return uval;
     }
 
-    void write_short(char* data, uint32_t value) {
+    void write_short(char* data, uint16_t value) {
         data[0] = value;
         data[1] = value >> 8;
     }
 
+    char read_char(const char* s) {
+        return s[0];
+    }
+
+    void write_char(char* s, char c) {
+        s[0] = c;
+    }
 
     //////////////////////////////////////////////////////////////////////
     //////////////////////       B+ Tree Page       //////////////////////
@@ -180,13 +408,23 @@ namespace DB::page
     //
     BTreePage::BTreePage(page_t_t page_t, page_id_t page_id, page_id_t parent_id, uint32_t nEntry,
         disk::DiskManager* disk_manager, key_t_t key_t, uint32_t str_len, bool isInit)
-        :Page(page_t, page_id, parent_id, nEntry, disk_manager, isInit),
-        key_t_(key_t), str_len_(str_len)//, last_offset_(PAGE_SIZE)
+        :Page(page_t, page_id, disk_manager, isInit),
+        parent_id_(parent_id),
+        nEntry_(nEntry),
+        key_t_(key_t),
+        str_len_(str_len)
+        //, last_offset_(PAGE_SIZE)
     {
         keys_ = new int32_t[BTNodeKeySize];
         if (!isInit) {
             write_short(data_ + offset::KEY_T, static_cast<uint32_t>(key_t_));
             write_short(data_ + offset::STR_LEN, str_len_);
+            if (parent_id_ == NOT_A_PAGE)
+                write_int(data_ + offset::PARENT_PAGE_ID, NOT_A_PAGE);
+            else
+                write_int(data_ + offset::PARENT_PAGE_ID, parent_id_);
+            write_int(data_ + offset::NENTRY, nEntry_);
+            set_dirty();
         }
     }
 
@@ -195,6 +433,12 @@ namespace DB::page
         delete[] keys_;
     }
 
+    page_id_t BTreePage::get_parent_id() const noexcept { return parent_id_; }
+    uint32_t BTreePage::get_nEntry() const noexcept { return nEntry_; }
+    void BTreePage::set_parent_id(page_id_t parent_id) noexcept {
+        parent_id_ = parent_id;
+        set_dirty();
+    }
     key_t_t BTreePage::get_key_t() const noexcept { return key_t_; }
     uint32_t BTreePage::get_str_len() const noexcept { return str_len_; }
 
@@ -211,7 +455,7 @@ namespace DB::page
             uint32_t keyStrIndex = 0;
             for (; keyStrIndex < BTNodeKeySize; keyStrIndex++)
                 if (data_[KEY_STR_START + keyStrIndex * KEY_STR_BLOCK]
-                    == static_cast<char>(key_str_state::OBSOLETE))
+                    == static_cast<char>(str_state::OBSOLETE))
                     break;
 
             if (keyStrIndex == BTNodeKeySize)
@@ -219,7 +463,7 @@ namespace DB::page
 
             const uint32_t offset = KEY_STR_START + keyStrIndex * KEY_STR_BLOCK;
             keys_[index] = offset; // update key-index
-            data_[offset] = static_cast<char>(key_str_state::INUSED);
+            data_[offset] = static_cast<char>(str_state::INUSED);
             const uint32_t min_size =
                 MAX_STR_LEN > kEntry.key_str.size() ? kEntry.key_str.size() : MAX_STR_LEN;
             std::memcpy(data_ + offset + 1, kEntry.key_str.c_str(), min_size);
@@ -234,7 +478,7 @@ namespace DB::page
         if (key_t_ != key_t_t::INTEGER)
         {
             const uint32_t offset = keys_[index];
-            data_[offset] = static_cast<char>(key_str_state::OBSOLETE);
+            data_[offset] = static_cast<char>(str_state::OBSOLETE);
         }
         set_dirty();
     }
@@ -287,7 +531,10 @@ namespace DB::page
     //
     ValuePage::ValuePage(page_id_t page_id, page_id_t parent_id, uint32_t nEntry,
         disk::DiskManager* disk_manager, bool isInit)
-        :Page(page_t_t::VALUE, page_id, parent_id, nEntry, disk_manager, isInit)//, cur_(offset::CUR)
+        :
+        Page(page_t_t::VALUE, page_id, disk_manager, isInit),
+        parent_id_(parent_id),
+        nEntry_(nEntry)
     {
         if (!isInit) {
             // write_int(data_ + offset::CUR, offset::CUR);
@@ -327,7 +574,11 @@ namespace DB::page
         set_dirty();
     }
 
-    void ValuePage::update_data() {}
+    void ValuePage::update_data()
+    {
+
+
+    }
 
 
 

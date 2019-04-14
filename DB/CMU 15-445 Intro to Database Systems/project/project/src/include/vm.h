@@ -4,6 +4,10 @@
 #include "log_manager.h"
 #include "buffer_pool.h"
 #include "BplusTree.h"
+#include "thread_pool.h"
+#include "page.h"
+#include <future>
+#include <unordered_map>
 
 namespace DB::tree { class BTree; }
 
@@ -17,20 +21,40 @@ namespace DB::vm
 
     struct StorageEngine
     {
-
         disk::DiskManager* disk_manager_;
         buffer::BufferPoolManager* buffer_pool_manager_;
-        //log::LogManager* log_manager_;
-        //LockManager* lock_manager_;
-        //TransactionManager *transaction_manager_;
     };
 
 
     class Table
     {
 
+    };
 
 
+    class VM
+    {
+    public:
+
+        VM();
+        ~VM();
+
+        void flush();
+
+
+        template<typename F, typename... Args>[[nodiscard]]
+            std::future<std::invoke_result_t<F, Args...>> register_task(F&& f, Args&& ...args) {
+            return thread_pool_.register_for_execution(f, args...);
+        }
+
+
+
+    private:
+
+        util::ThreadsPool thread_pool_;
+        StorageEngine storage_engine_;
+        page::DBMetaPage* db_meta_;
+        std::unordered_map<std::string, page::TableMetaPage*> table_meta_;
     };
 
 

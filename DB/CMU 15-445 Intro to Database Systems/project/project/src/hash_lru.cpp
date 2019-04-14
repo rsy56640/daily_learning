@@ -270,6 +270,16 @@ namespace DB::buffer
     }
 
 
+    void Hash_LRU::flush() {
+        std::lock_guard<std::shared_mutex> lg(shared_mutex_);
+        for (PageList& bucket : buckets_) {
+            PageListHandle* it = bucket.head_.next_hash_;
+            while (it != &bucket.head_)
+                it->page_->flush();
+        }
+    }
+
+
     // The read of `bucket_num_` does not contend with modifying it in `rehash()`.
     // Becase the modification must acquire the write-lock,
     // thus any find/insert/erase call will block.
@@ -357,7 +367,7 @@ namespace DB::buffer
 
     void Hash_LRU::lru_evict()
     {
-        ///*
+        /*
         page_id_t page_id;
         PageListHandle* victim;
 
@@ -386,6 +396,9 @@ namespace DB::buffer
 
             if (victim->in_page_list_)
                 page_list.remove(victim);
+
+            victim->page_->set_dirty(); // in case that the victim has resided in memory.
+                                        // block `FetchPage` until the victim has been flushed.
 
             victim->unref(); // `unref` for LRU
         }

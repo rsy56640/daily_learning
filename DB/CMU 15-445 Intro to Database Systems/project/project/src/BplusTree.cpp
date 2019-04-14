@@ -1990,6 +1990,7 @@ namespace DB::tree
         if (node->get_key_t() == key_t_t::INTEGER) {
             return kEntry.key_int - node->keys_[key_index];
         }
+        // TODO: compound key
         else {
             const KeyEntry key = node->read_key(key_index);
             return kEntry.key_str.compare(key.key_str);

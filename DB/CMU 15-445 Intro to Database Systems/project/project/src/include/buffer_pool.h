@@ -43,10 +43,9 @@ namespace DB::buffer
         // remove page_id from hash-lru
         bool DeletePage(page_id_t page_id);
 
-    private:
 
-        // parse the existing buffer into Page*.
-        Page * buffer_to_page(const char(&buffer)[page::PAGE_SIZE]);
+        void flush();
+
 
     private:
 
