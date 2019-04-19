@@ -1,10 +1,11 @@
 #include "include/BplusTree.h"
 #include "include/disk_manager.h"
-#include "include/vm.h"
 #include "include/page.h"
 #include "include/debug_log.h"
+#include "include/buffer_pool.h"
 #include <cstring>
 #include <string>
+#include <stack>
 
 // UNDONE: read-write lock, does 1 operation holds just 2 locks at one time?
 //                                        or holds a sequence of locks from root to bottom?
@@ -13,6 +14,58 @@ namespace DB::tree
 {
 
     using namespace ::DB::page;
+
+
+    BTit::BTit(buffer::BufferPoolManager* buffer_pool, BTreePage* leaf, uint32_t cur_index)
+        :buffer_pool_(buffer_pool), leaf_(leaf), cur_index_(cur_index) {}
+
+    void BTit::operator++()
+    {
+        if (leaf_ == nullptr)
+            debug::ERROR_LOG("BTit out of range, incorrect usage.\n");
+
+        if (++cur_index_ == leaf_->nEntry_) {
+            cur_index_ = 0;
+            if (leaf_->get_page_t() == page_t_t::ROOT_LEAF) {
+                leaf_ = nullptr;
+            }
+            else {
+                BTreePage* temp = leaf_;
+                const page_id_t right_page_id = static_cast<LeafPage*>(leaf_)->next_page_id_;
+                if (right_page_id != NOT_A_PAGE)
+                    leaf_ = static_cast<LeafPage*>(buffer_pool_->FetchPage(right_page_id));
+                else
+                    leaf_ = nullptr;
+                temp->unref();
+            }
+        }
+    }
+
+    bool BTit::operator!=(const BTit& other) const {
+        return leaf_ != other.leaf_ || cur_index_ != other.cur_index_;
+    }
+
+    void BTit::destroy() {
+        if (leaf_ != nullptr && leaf_->get_page_t() != page_t_t::ROOT_LEAF)
+            leaf_->unref();
+    }
+
+    KeyEntry BTit::getK() const {
+        return leaf_->read_key(cur_index_);
+    }
+
+    ValueEntry BTit::getV() const {
+        ValueEntry vEntry;
+        if (leaf_->get_page_t() == page_t_t::ROOT_LEAF)
+            static_cast<RootPage*>(leaf_)->read_value(cur_index_, vEntry);
+        else
+            static_cast<LeafPage*>(leaf_)->read_value(cur_index_, vEntry);
+        return vEntry;
+    }
+
+
+
+
 
     // root is always resides in memory.
     // we don't care whether the root is in buffer-pool.
@@ -33,22 +86,127 @@ namespace DB::tree
     uint32_t BTree::size() const { return size_; }
 
 
-    void BTree::range_query_begin() {
+    void BTree::range_query_begin_lock() {
         range_query_lock_.lock();
     }
 
-    /*
-    BTit BTree::range_query_from_begin() {
 
+    BTit BTree::range_query_from_begin()
+    {
+        if (root_->page_t_ == page_t_t::ROOT_LEAF) {
+            if (root_->nEntry_ > 0)
+                return BTit{ buffer_pool_, root_, 0 };
+            else
+                return BTit{ buffer_pool_, nullptr, 0 };
+        }
+        else {
+            base_ptr node = root_;
+            std::stack<base_ptr> stk;
+            while (node->page_t_ != page_t_t::LEAF) {
+                node = fetch_node(static_cast<link_ptr>(node)->branch_[0]);
+                stk.push(node);
+            }
+            node->ref(); // `ref` the leaf
+            while (!stk.empty()) {
+                stk.top()->unref();
+                stk.pop();
+            }
+            return BTit{ buffer_pool_, node, 0 };
+        }
     }
 
 
     BTit BTree::range_query_from_end() {
-
+        return BTit{ buffer_pool_, nullptr, 0 };
     }
-    */
 
-    void BTree::range_query_end() {
+
+    // `equal` means whether or not it can take `=`
+    // handle [kEntry <= it] and [kEntry < it]
+    BTit BTree::range_query_from_left_begin(const KeyEntry& kEntry, bool equal) {
+        if (equal)
+            return find_first_greater_than_or_equal_to(kEntry);
+        else
+            return find_first_greater_than(kEntry);
+    }
+
+
+    // `equal` means whether or not it can take `=`
+    // handle [it <= kEntry] and [it < kEntry]
+    BTit BTree::range_query_from_right_end(const KeyEntry& kEntry, bool equal) {
+        if (equal)
+            return find_first_greater_than(kEntry);
+        else
+            return find_first_greater_than_or_equal_to(kEntry);
+    }
+
+
+    // it > kEntry
+    BTit BTree::find_first_greater_than(const KeyEntry& kEntry)
+    {
+        base_ptr node = root_;
+        std::stack<base_ptr> stk;
+        while (node->page_t_ != page_t_t::LEAF || node->page_t_ != page_t_t::ROOT_LEAF) {
+            uint32_t index = 0;
+            for (; index < node->nEntry_; index++)
+                if (key_compare(kEntry, node, index) <= 0)
+                    break;
+            // internal.key[i] is the right-most key in internal.br[i]
+            if (index < node->nEntry_ && key_compare(kEntry, node, index) == 0)
+                node = fetch_node(node, index + 1);
+            else
+                node = fetch_node(node, index);
+            stk.push(node);
+        }
+        if (node->page_t_ == page_t_t::LEAF)
+            node->ref(); // `ref` the leaf
+        while (!stk.empty()) {
+            stk.top()->unref();
+            stk.pop();
+        }
+        uint32_t index = 0;
+        for (; index < node->nEntry_; index++)
+            if (key_compare(kEntry, node, index) < 0) // not equal
+                break;
+        if (index == node->nEntry_)
+            return BTit{ buffer_pool_, nullptr, 0 };
+        else
+            return BTit{ buffer_pool_, node, index };
+    }
+
+
+    // it >= kEntry
+    BTit BTree::find_first_greater_than_or_equal_to(const KeyEntry& kEntry)
+    {
+        base_ptr node = root_;
+        std::stack<base_ptr> stk;
+        while (node->page_t_ != page_t_t::LEAF || node->page_t_ != page_t_t::ROOT_LEAF) {
+            uint32_t index = 0;
+            for (; index < node->nEntry_; index++)
+                if (key_compare(kEntry, node, index) <= 0)
+                    break;
+            // internal.key[i] is the right-most key in internal.br[i]
+            node = fetch_node(node, index);
+            stk.push(node);
+        }
+        if (node->page_t_ == page_t_t::LEAF)
+            node->ref(); // `ref` the leaf
+        while (!stk.empty()) {
+            stk.top()->unref();
+            stk.pop();
+        }
+        uint32_t index = 0;
+        for (; index < node->nEntry_; index++)
+            if (key_compare(kEntry, node, index) <= 0)
+                break;
+        if (index == node->nEntry_)
+            return BTit{ buffer_pool_, nullptr, 0 };
+        else
+            return BTit{ buffer_pool_, node, index };
+    }
+
+
+    void BTree::range_query_end_unlock() {
         range_query_lock_.unlock();
     }
 
@@ -192,6 +350,8 @@ namespace DB::tree
     //                     find K_index, recusively go down.
     uint32_t BTree::erase(const KeyEntry& kEntry)
     {
+        std::shared_lock<std::shared_mutex> lg(range_query_lock_);
+
         root_ptr root = static_cast<root_ptr>(root_);
         root->page_write_lock();
 
@@ -837,7 +997,8 @@ namespace DB::tree
                 break;
 
         // now (kEntry <= key[index]) or (index == n)
-        if (index == node->nEntry_ && node->get_page_t() == page_t_t::LEAF)
+        if (index == node->nEntry_ &&
+            (node->get_page_t() == page_t_t::LEAF || node->get_page_t() == page_t_t::ROOT_LEAF))
             return; // all key < kEntry, so no result.
 
         // if at Leaf
@@ -2013,6 +2174,7 @@ namespace DB::tree
             return kEntry.key_int - node->keys_[key_index];
         }
         // TODO: compound key
+        //          design a protocol that forms a bijection between compound keys and key_str.
         else {
             const KeyEntry key = node->read_key(key_index);
             return kEntry.key_str.compare(key.key_str);

@@ -1,4 +1,4 @@
-#ifdef _xjbDB_test_BUFFERPOOL_
+#ifdef _xjbDB_test_VM_
 #include "test.h"
 #include <map>
 #include <cstring>
@@ -36,4 +36,4 @@ void test()
 
 }
 
-#endif // _xjbDB_test_BUFFERPOOL_
+#endif // _xjbDB_test_VM_

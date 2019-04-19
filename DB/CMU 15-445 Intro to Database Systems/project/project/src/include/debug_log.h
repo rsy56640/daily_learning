@@ -31,14 +31,15 @@ namespace DB::debug
         ERASE_NONMIN_INTERNAL = true,
 
         NON_DEBUG = false,
-        DEBUG = true;
+        DEBUG = true,
+        CONTROL = false;
 
     static const char* debug_output = "./debug_output.txt";
 
 
     template<typename ...Arg>
     inline void DEBUG_LOG(bool config, const char* format, Arg... args) {
-        if (config) std::printf(format, args...);
+        if (CONTROL && config) std::printf(format, args...);
     }
 
     template<typename ...Arg>

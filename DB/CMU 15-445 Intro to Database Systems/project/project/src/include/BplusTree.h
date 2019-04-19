@@ -45,9 +45,34 @@ namespace DB::tree
         ERASE_KV = 1;
 
 
+    // The usage of BTiterator: 
+    // e.g. 
+    //      WHERE 3 <= pk < 11
+    //
+    //  bt.range_query_begin_lock();
+    //  BTit it = bt.range_query_from_left_begin(3, true);
+    //  BTit end = bt.range_query_from_right_end(11, false);
+    //  while(it != end) {
+    //      // do something on it
+    //      // ...
+    //      ++it;
+    //  }
+    //  it.destroy();
+    //  end.destroy();
+    //  bt.range_query_end_unlock();
+    //
     class BTit {
-        BTreePage* page;
-        uint32_t cur_index;
+    public:
+        BTit(buffer::BufferPoolManager*, BTreePage* leaf, uint32_t cur_index);
+        void operator++();                  // programmer promise the state before ++ is valid.
+        bool operator!=(const BTit&) const;
+        void destroy();                     // destroy the iterator when not use
+        KeyEntry getK() const;
+        ValueEntry getV() const;
+    private:
+        BTreePage * leaf_;
+        uint32_t cur_index_;
+        buffer::BufferPoolManager* buffer_pool_;
     };
 
 
@@ -86,12 +111,22 @@ namespace DB::tree
         uint32_t size() const;
 
 
-        void range_query_begin();
+
+        void range_query_begin_lock();
 
         BTit range_query_from_begin();
-        BTit range_query_from_end();
+        BTit range_query_from_end();            // the `leaf == nullptr` means it's end.
 
-        void range_query_end();
+        // `equal` means whether or not it can take `=`
+        // handle [kEntry <= it] and [kEntry < it]
+        BTit range_query_from_left_begin(const KeyEntry& kEntry, bool equal);
+
+        // `equal` means whether or not it can take `=`
+        // handle [it <= kEntry] and [it < kEntry]
+        BTit range_query_from_right_end(const KeyEntry& kEntry, bool equal);
+
+        void range_query_end_unlock();
+
 
 
         // return state: `OBSOLETE` denotes no such key exists.
@@ -300,6 +335,12 @@ namespace DB::tree
         //                          adjust node.key and node.branch
         //                          find K_index, recusively go down.
         uint32_t ERASE_NONMIN(link_ptr node, uint32_t index, base_ptr child, const KeyEntry&);
+
+
+        // it > kEntry
+        BTit find_first_greater_than(const KeyEntry& kEntry);
+        // it >= kEntry
+        BTit find_first_greater_than_or_equal_to(const KeyEntry& kEntry);
 
 
     private:
