@@ -44,6 +44,13 @@ namespace DB::tree
         ERASE_NOTHING = 0,
         ERASE_KV = 1;
 
+
+    class BTit {
+        BTreePage* page;
+        uint32_t cur_index;
+    };
+
+
     // NB: in the B+Tree, the root page should be `ref()` in the whole execution,
     //     while other pages are fetched from buffer-pool whenever used.
     // Internal Page structure:
@@ -64,7 +71,7 @@ namespace DB::tree
         using root_ptr = RootPage * ;
 
     public:
-        BTree(OpenTableInfo, vm::StorageEngine* storage_engine, key_t_t, uint32_t str_len = 0);
+        BTree(OpenTableInfo, buffer::BufferPoolManager*, key_t_t, uint32_t str_len = 0);
         ~BTree();
         BTree(const BTree&) = delete;
         BTree(BTree&&) = delete;
@@ -77,6 +84,14 @@ namespace DB::tree
 
 
         uint32_t size() const;
+
+
+        void range_query_begin();
+
+        BTit range_query_from_begin();
+        BTit range_query_from_end();
+
+        void range_query_end();
 
 
         // return state: `OBSOLETE` denotes no such key exists.
@@ -288,8 +303,7 @@ namespace DB::tree
 
 
     private:
-        vm::StorageEngine * storage_engine_;
-        buffer::BufferPoolManager* buffer_pool_; // this is in StorageEngine, here for convenience
+        buffer::BufferPoolManager* buffer_pool_;
         const key_t_t key_t_;
         const uint32_t str_len_;
         base_ptr root_;

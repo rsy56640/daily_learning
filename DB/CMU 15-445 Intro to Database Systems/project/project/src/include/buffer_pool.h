@@ -46,11 +46,12 @@ namespace DB::buffer
 
         void flush();
 
+    public:
+        disk::DiskManager* disk_manager_;
 
     private:
 
         Hash_LRU hash_lru_;
-        disk::DiskManager* disk_manager_;
         //log::LogManager* log_manager_;
 
     }; // end class BufferPoolManager

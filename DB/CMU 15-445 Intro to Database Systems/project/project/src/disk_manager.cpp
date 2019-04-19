@@ -156,11 +156,13 @@ namespace DB::disk
     uint32_t DiskManager::log_size() const { return log_size_; }
 
 
+    /*
     uint32_t DiskManager::hash(page_id_t page_id) const noexcept {
         return page_id & (dirty_hash_bucket - 1);
     }
 
 
+    
     bool DiskManager::is_dirty(page_id_t page_id) const {
         const uint32_t bucket_no = hash(page_id);
         std::shared_lock<std::shared_mutex> slk{ dirty_page_sets_mtx_[bucket_no] };
@@ -177,6 +179,6 @@ namespace DB::disk
         std::lock_guard<std::shared_mutex> lg{ dirty_page_sets_mtx_[bucket_no] };
         dirty_page_sets_[bucket_no].insert(page_id);
     }
-
+    */
 
 } // end namespace DB::disk

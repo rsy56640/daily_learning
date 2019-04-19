@@ -28,7 +28,7 @@ namespace DB::buffer
                 "BufferPoolManager::FetchPage() does not fetch, maybe wait for reading page %d\n",
                 page_id);
         }
-        page_ptr = buffer_to_page(buffer);
+        page_ptr = buffer_to_page(this, buffer);
         hash_lru_.insert(page_ptr->get_page_id(), page_ptr);
         page_ptr->ref();
         return page_ptr;

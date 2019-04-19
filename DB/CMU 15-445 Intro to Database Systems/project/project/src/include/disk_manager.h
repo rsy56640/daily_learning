@@ -61,11 +61,11 @@ namespace DB::disk
 
         uint32_t log_size() const;
 
-        uint32_t hash(page_id_t page_id) const noexcept;
+        //uint32_t hash(page_id_t page_id) const noexcept;
 
-        bool is_dirty(page_id_t page_id) const;
+        //bool is_dirty(page_id_t page_id) const;
 
-        void set_dirty(page_id_t page_id);
+        //void set_dirty(page_id_t page_id);
 
 
         DiskManager(const DiskManager&) = delete;
@@ -76,8 +76,8 @@ namespace DB::disk
     private:
         std::atomic<page_id_t> cur_page_no_; // the last used page_id
 
-        std::unordered_set<page_id_t> dirty_page_sets_[dirty_hash_bucket];
-        mutable std::shared_mutex dirty_page_sets_mtx_[dirty_hash_bucket];
+        //std::unordered_set<page_id_t> dirty_page_sets_[dirty_hash_bucket];
+        //mutable std::shared_mutex dirty_page_sets_mtx_[dirty_hash_bucket];
         //std::unordered_map<page_id_t, WaitInfo*> wait_sets_[dirty_hash_bucket];
         //mutable std::mutex wait_sets_mtx_[dirty_hash_bucket];
 

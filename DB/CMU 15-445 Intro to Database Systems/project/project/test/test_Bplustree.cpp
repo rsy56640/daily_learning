@@ -45,12 +45,12 @@ void test()
 
     OpenTableInfo info;
     info.isInit = true;
-    std::shared_ptr<disk::DiskManager> disk_manager = std::make_shared<disk::DiskManager>("test");
+    std::shared_ptr<disk::DiskManager> disk_manager = std::make_shared<disk::DiskManager>();
     std::shared_ptr<vm::StorageEngine> storage_engine = std::make_shared<vm::StorageEngine>();
     std::shared_ptr<buffer::BufferPoolManager> buffer_pool_manager = std::make_shared<buffer::BufferPoolManager>(disk_manager.get());
     storage_engine->disk_manager_ = disk_manager.get();
     storage_engine->buffer_pool_manager_ = buffer_pool_manager.get();
-    BTree bt(info, storage_engine.get(), page::key_t_t::INTEGER);
+    BTree bt(info, storage_engine->buffer_pool_manager_, page::key_t_t::INTEGER);
 
     map<int32_t, std::string> mp_bt;
 

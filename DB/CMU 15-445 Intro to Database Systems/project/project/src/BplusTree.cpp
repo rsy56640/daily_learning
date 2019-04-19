@@ -17,9 +17,9 @@ namespace DB::tree
     // root is always resides in memory.
     // we don't care whether the root is in buffer-pool.
     // No one else may access root Page by using root_id!!!
-    BTree::BTree(OpenTableInfo openTableInfo, vm::StorageEngine* storage_engine,
+    BTree::BTree(OpenTableInfo openTableInfo, buffer::BufferPoolManager* buffer_pool,
         key_t_t key_t, uint32_t str_len)
-        :storage_engine_(storage_engine), buffer_pool_(storage_engine->buffer_pool_manager_),
+        :buffer_pool_(buffer_pool),
         key_t_(key_t), str_len_(str_len), root_(nullptr), size_(0)
     {
         BT_create(openTableInfo);
@@ -29,7 +29,29 @@ namespace DB::tree
         root_->unref();
     }
 
+
     uint32_t BTree::size() const { return size_; }
+
+
+    void BTree::range_query_begin() {
+        range_query_lock_.lock();
+    }
+
+    /*
+    BTit BTree::range_query_from_begin() {
+
+    }
+
+
+    BTit BTree::range_query_from_end() {
+
+    }
+    */
+
+    void BTree::range_query_end() {
+        range_query_lock_.unlock();
+    }
+
 
     ValueEntry BTree::find(const KeyEntry& kEntry) const
     {
@@ -840,19 +862,19 @@ namespace DB::tree
 
 
     BTreePage* BTree::fetch_node(page_id_t page_id) const {
-        return static_cast<base_ptr>(storage_engine_->buffer_pool_manager_->FetchPage(page_id));
+        return static_cast<base_ptr>(buffer_pool_->FetchPage(page_id));
     }
 
 
     BTreePage* BTree::fetch_node(base_ptr node, uint32_t index) const {
-        return static_cast<base_ptr>(storage_engine_->buffer_pool_manager_
+        return static_cast<base_ptr>(buffer_pool_
             ->FetchPage(static_cast<link_ptr>(node)->branch_[index]));
     }
 
 
     BTreePage* BTree::allocate_node(PageInitInfo info) const {
         BTreePage* page_ptr =
-            static_cast<base_ptr>(storage_engine_->buffer_pool_manager_->NewPage(info));
+            static_cast<base_ptr>(buffer_pool_->NewPage(info));
         return page_ptr;
     }
 
@@ -1973,7 +1995,7 @@ namespace DB::tree
 
 
     void BTree::debug() const {
-        const page_id_t cur_page_id = storage_engine_->disk_manager_->get_cut_page_id();
+        const page_id_t cur_page_id = buffer_pool_->disk_manager_->get_cut_page_id();
         for (page_id_t i = 1; i <= cur_page_id; i++)
             debug_page(true, i);
     }

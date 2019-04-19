@@ -32,6 +32,14 @@ namespace DB::vm
     };
 
 
+    // used as a temporary table.
+    // implementation might be stream ?? with some sync mechanism.
+    class VitrualTable {
+
+
+    };
+
+
     class VM
     {
     public:

@@ -6,6 +6,7 @@
 #include <atomic>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include "env.h"
 
 namespace DB::disk { class DiskManager; }
@@ -17,19 +18,19 @@ namespace DB::page
     constexpr uint32_t PAGE_SIZE = 1 << 10; // 1KB
 
     class Page;
-    Page* buffer_to_page(const char(&buffer)[page::PAGE_SIZE]);
+    Page* buffer_to_page(buffer::BufferPoolManager*, const char(&buffer)[page::PAGE_SIZE]);
     class DBMetaPage;
     class TableMetaPage;
     class InternalPage;
     class ValuePage;
     class LeafPage;
     class RootPage;
-    DBMetaPage* parse_DBMetaPage(const char(&buffer)[page::PAGE_SIZE]);
-    TableMetaPage* parse_TableMetaPage(const char(&buffer)[page::PAGE_SIZE]);
-    InternalPage* parse_InternalPage(const char(&buffer)[page::PAGE_SIZE]);
-    ValuePage* parse_ValuePage(const char(&buffer)[page::PAGE_SIZE]);
-    LeafPage* parse_LeafPage(const char(&buffer)[page::PAGE_SIZE]);
-    RootPage* parse_RootPage(const char(&buffer)[page::PAGE_SIZE]);
+    DBMetaPage* parse_DBMetaPage(buffer::BufferPoolManager*, const char(&buffer)[page::PAGE_SIZE]);
+    TableMetaPage* parse_TableMetaPage(buffer::BufferPoolManager*, const char(&buffer)[page::PAGE_SIZE]);
+    InternalPage* parse_InternalPage(buffer::BufferPoolManager*, const char(&buffer)[page::PAGE_SIZE]);
+    ValuePage* parse_ValuePage(buffer::BufferPoolManager*, const char(&buffer)[page::PAGE_SIZE]);
+    LeafPage* parse_LeafPage(buffer::BufferPoolManager*, const char(&buffer)[page::PAGE_SIZE]);
+    RootPage* parse_RootPage(buffer::BufferPoolManager*, const char(&buffer)[page::PAGE_SIZE]);
 
 
     enum class page_t_t :uint32_t {
@@ -70,12 +71,15 @@ namespace DB::page
             // DB meta
             CUR_PAGE_NO = 8,
             TABLE_NUM = 12,
+            TABLE_PAGEID_NAMEOFFSET_START = 16,
             TABLE_NAME_STR_START = 256,
 
             // Table meta
             BT_ROOT_ID = 8,
-            DEFAULT_VALUE_PAGE_ID = 12,
-            COLUMN_NAME_STR_START = 226,
+            COL_NUM = 12,
+            DEFAULT_VALUE_PAGE_ID = 16,
+            COLINFO_START = 20,
+            COLUMN_NAME_STR_START = 230,
 
             // BTree Page / Value Page
             PARENT_PAGE_ID = 8,
@@ -85,10 +89,16 @@ namespace DB::page
             KEY_T = 16,
             STR_LEN = 18,
 
+            // Internal Page
+            CHILD_START = 20,
+
             // Leaf Page
             VALUE_PAGE_ID = 20,
             PREVIOUS_PAGE_ID = 24,
-            NEXT_PAGE_ID = 28;
+            NEXT_PAGE_ID = 28,
+            KV_START = 32,
+
+            ZERO = 0;
 
     }; // end class offset
 
@@ -179,7 +189,7 @@ namespace DB::page
         virtual void update_data();
 
     public:
-        uint32_t cur_page_no_;
+        uint32_t cur_page_no_; // might be out of date, update from disk_manager.
         uint32_t table_num_;
         uint32_t* table_page_ids_;
         uint32_t* table_name_offset_;
@@ -203,31 +213,50 @@ namespace DB::page
         char content_[MAX_TUPLE_SIZE] = { 0 };        // 67B
     };
 
+    enum class key_t_t :uint32_t {
+        INTEGER,
+        CHAR,
+        VARCHAR,
+    };
+    constexpr uint32_t INVALID_OFFSET = PAGE_SIZE;
+    // if key is (VAR)CHAR, the key is stored the offset to the real content.
+    // all contents are organized as blocks, each block is 58B.
+    // block structure: mark(1B), content(<=57B)
+    // the 1st block starts at 152u.
+    constexpr uint32_t MAX_STR_LEN = 57u;
+    constexpr uint32_t KEY_STR_BLOCK = 58u;
+    constexpr uint32_t KEY_STR_START = 152u;
+
+    struct KeyEntry {
+        key_t_t key_t;
+        int32_t key_int;
+        std::string key_str; // <=57B
+    };
+
+    struct ColumnInfo {
+        uint32_t col_name_offset_;
+        col_t_t col_t_;
+        uint16_t str_len_;      // used when col_t_ = `CHAR` or `VARCHAR`
+        uint16_t constraint_t_;
+        uint32_t other_value_;  // table_id     if constraint_t_ = `FK`
+                                // value_offset if constraint_t_ = `DEFAULT`
+        bool isPK() const noexcept { return constraint_t_ & constraint_t_t::PK; }
+        bool isFK() const noexcept { return constraint_t_ & constraint_t_t::FK; }
+        bool isNOT_NULL() const noexcept { return constraint_t_ & constraint_t_t::NOT_NULL; }
+        bool isDEFAULT() const noexcept { return constraint_t_ & constraint_t_t::DEFAULT; }
+        void setPK() { constraint_t_ |= constraint_t_t::PK; }
+        void setFK() { constraint_t_ |= constraint_t_t::FK; }
+        void setNOT_NULL() { constraint_t_ |= constraint_t_t::NOT_NULL; }
+        void setDEFAULT() { constraint_t_ |= constraint_t_t::DEFAULT; }
+    };
     class TableMetaPage : public Page {
     public:
         static constexpr uint32_t COLUMN_NAME_STR_BLOCK = 51;
         static constexpr uint32_t MAX_COLUMN_NAME_STR = 50;
         static constexpr uint32_t MAX_COLUMN_NUM = 15;
 
-        struct ColumnInfo {
-            uint32_t col_name_offset_;
-            col_t_t col_t_;
-            uint16_t str_len_;      // used when col_t_ = `CHAR` or `VARCHAR`
-            uint16_t constraint_t_;
-            uint32_t other_value_;  // table_id     if constraint_t_ = `FK`
-                                    // value_offset if constraint_t_ = `DEFAULT`
-            bool isPK() const noexcept { return constraint_t_ & constraint_t_t::PK; }
-            bool isFK() const noexcept { return constraint_t_ & constraint_t_t::FK; }
-            bool isNOT_NULL() const noexcept { return constraint_t_ & constraint_t_t::NOT_NULL; }
-            bool isDEFAULT() const noexcept { return constraint_t_ & constraint_t_t::DEFAULT; }
-            void setPK() { constraint_t_ |= constraint_t_t::PK; }
-            void setFK() { constraint_t_ |= constraint_t_t::FK; }
-            void setNOT_NULL() { constraint_t_ |= constraint_t_t::NOT_NULL; }
-            void setDEFAULT() { constraint_t_ |= constraint_t_t::DEFAULT; }
-        };
-
         TableMetaPage(buffer::BufferPoolManager* buffer_pool, page_t_t, page_id_t,
-            disk::DiskManager*, bool isInit,
+            disk::DiskManager*, bool isInit, key_t_t key_t, uint32_t str_len, // key_t and str_len are needed when init
             page_id_t BT_root_id, uint32_t col_num, page_id_t default_value_page_id);
 
         ~TableMetaPage();
@@ -249,6 +278,8 @@ namespace DB::page
         page_id_t default_value_page_id_;
         ValuePage* value_page_;
         std::unordered_map<std::string, ColumnInfo*> col_name2col_;
+        uint32_t pk_col_;
+        std::vector<std::string> cols_;
         tree::BTree* bt_;
     };
 
@@ -276,33 +307,17 @@ namespace DB::page
     constexpr uint32_t BTNodeKeySize = (BTdegree << 1) - 1;
     constexpr uint32_t BTNodeBranchSize = BTdegree << 1;
 
-    enum class key_t_t :uint32_t {
-        INTEGER,
-        CHAR,
-        VARCHAR,
-    };
-    constexpr uint32_t INVALID_OFFSET = PAGE_SIZE;
-    constexpr uint32_t MAX_STR_LEN = 57u;
-
-
-    struct KeyEntry {
-        key_t_t key_t;
-        int32_t key_int;
-        std::string key_str; // <=57B
-    };
-
-
-    // if key is (VAR)CHAR, the key is stored the offset to the real content.
-    // all contents are organized as blocks, each block is 58B.
-    // block structure: mark(1B), content(<=57B)
-    // the 1st block starts at 152u.
-    constexpr uint32_t KEY_STR_BLOCK = 58u;
-    constexpr uint32_t KEY_STR_START = 152u;
 
     // for ROOT, INTERNAL, LEAF
     class BTreePage :public Page {
         friend class ::DB::tree::BTree;
     public:
+
+        BTreePage(page_t_t, page_id_t, page_id_t parent_id, uint32_t nEntry, disk::DiskManager*,
+            key_t_t, uint32_t str_len, bool isInit);
+        virtual ~BTreePage();
+
+        virtual void update_data() = 0;
 
         page_id_t get_parent_id() const noexcept;
         uint32_t get_nEntry() const noexcept;
@@ -320,13 +335,10 @@ namespace DB::page
         // called when key_t is (VAR)CHAR
         KeyEntry read_key(uint32_t index) const;
 
-        int32_t* keys_;    // nEntry // WTF, if in protected, BTree can not access this.
 
-    protected:
-        BTreePage(page_t_t, page_id_t, page_id_t parent_id, uint32_t nEntry, disk::DiskManager*,
-            key_t_t, uint32_t str_len, bool isInit);
-        ~BTreePage();
+    public:
 
+        int32_t * keys_;    // nEntry // WTF, if in protected, BTree can not access this.
         page_id_t parent_id_;
         uint32_t nEntry_;
         const key_t_t key_t_;
