@@ -98,6 +98,9 @@ namespace DB::page
             NEXT_PAGE_ID = 28,
             KV_START = 32,
 
+            // Value Page
+            VALUE_START = 16,
+
             ZERO = 0;
 
     }; // end class offset
@@ -109,6 +112,7 @@ namespace DB::page
     class Page
     {
         friend class ::DB::tree::BTree;
+        friend class ::DB::buffer::BufferPoolManager;
     public:
 
         Page(page_t_t, page_id_t, disk::DiskManager*, bool isInit);
@@ -148,6 +152,7 @@ namespace DB::page
         Page(Page&&) = delete;
         Page& operator=(Page&&) = delete;
 
+
     protected:
         disk::DiskManager * disk_manager_;
         page_t_t page_t_; // fundamentally const, but ROOT may violate the rule.
@@ -176,13 +181,13 @@ namespace DB::page
         static constexpr uint32_t MAX_TABLE_NAME_STR = 24;
         static constexpr uint32_t MAX_TABLE_NUM = 30;
 
-        DBMetaPage(page_t_t, page_id_t, disk::DiskManager*, bool isInit,
+        DBMetaPage(page_id_t, disk::DiskManager*, bool isInit,
             uint32_t cur_page_no, uint32_t table_num);
         ~DBMetaPage();
 
         page_id_t find_table(const std::string&);
 
-        bool create_table(page_id_t, const std::string&);
+        bool insert_table(page_id_t, const std::string&);
 
         bool drop_table(const std::string&);
 
@@ -205,12 +210,12 @@ namespace DB::page
     struct constraint_t_t { enum { PK = 1, FK = 2, NOT_NULL = 4, DEFAULT = 8, }; };
 
     enum class value_state :char { OBSOLETE, INUSED };
-    constexpr uint32_t MAX_TUPLE_SIZE = 67u;
-    constexpr uint32_t TUPLE_BLOCK_SIZE = 68u;
-    // NB: *** tuple size <= 67B ***
+    constexpr uint32_t MAX_TUPLE_SIZE = 66u;
+    constexpr uint32_t TUPLE_BLOCK_SIZE = 67u;
+    // NB: *** tuple size <= 66B ***
     struct ValueEntry {
         value_state value_state_ = value_state::OBSOLETE;
-        char content_[MAX_TUPLE_SIZE] = { 0 };        // 67B
+        char content_[MAX_TUPLE_SIZE] = { 0 };        // 66B
     };
 
     enum class key_t_t :uint32_t {
@@ -233,6 +238,8 @@ namespace DB::page
         std::string key_str; // <=57B
     };
 
+    // TODO: default init, create on `insert_column` or know it has default initially
+    //
     struct ColumnInfo {
         uint32_t col_name_offset_;
         col_t_t col_t_;
@@ -255,8 +262,9 @@ namespace DB::page
         static constexpr uint32_t MAX_COLUMN_NAME_STR = 50;
         static constexpr uint32_t MAX_COLUMN_NUM = 15;
 
-        TableMetaPage(buffer::BufferPoolManager* buffer_pool, page_t_t, page_id_t,
-            disk::DiskManager*, bool isInit, key_t_t key_t, uint32_t str_len, // key_t and str_len are needed when init
+        TableMetaPage(buffer::BufferPoolManager* buffer_pool, page_id_t,
+            disk::DiskManager*, bool isInit, key_t_t key_t, uint32_t str_len,
+            // `BT_root_id` is needed only when (!init)
             page_id_t BT_root_id, uint32_t col_num, page_id_t default_value_page_id);
 
         ~TableMetaPage();
@@ -275,7 +283,7 @@ namespace DB::page
     public:
         page_id_t BT_root_id_;
         uint32_t col_num_;
-        page_id_t default_value_page_id_;
+        page_id_t default_value_page_id_ = NOT_A_PAGE;
         ValuePage* value_page_;
         std::unordered_map<std::string, ColumnInfo*> col_name2col_;
         uint32_t pk_col_;
@@ -390,6 +398,7 @@ namespace DB::page
     class ValuePage :public Page {
     public:
         ValuePage(page_id_t, page_id_t, uint32_t nEntry, disk::DiskManager*, bool isInit);
+        ~ValuePage();
 
         // read ValueEntry at `offset`.
         void read_content(uint32_t offset, ValueEntry&) const;
@@ -404,7 +413,6 @@ namespace DB::page
         void erase_block(uint32_t offset);
 
         // update the all metadata into memory, for the later `flush()`.
-        // *** in fact, do nothing ***
         virtual void update_data();
 
     public:
@@ -458,6 +466,7 @@ namespace DB::page
     class RootPage :public InternalPage {
         friend class ::DB::tree::BTree;
         friend class BTreePage;
+        friend RootPage* parse_RootPage(buffer::BufferPoolManager* buffer_pool, const char(&buffer)[page::PAGE_SIZE]);
     public:
         RootPage(buffer::BufferPoolManager*, page_t_t, page_id_t parent_id, page_id_t,
             uint32_t nEntry, disk::DiskManager*, key_t_t, uint32_t str_len, page_id_t value_page_id, bool isInit);

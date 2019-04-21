@@ -63,6 +63,17 @@ namespace DB::tree
         return vEntry;
     }
 
+    void BTit::updateV(const ValueEntry& vEntry) {
+        if (leaf_->get_page_t() == page_t_t::ROOT_LEAF) {
+            static_cast<RootPage*>(leaf_)->erase_value(cur_index_);
+            static_cast<RootPage*>(leaf_)->insert_value(cur_index_, vEntry);
+        }
+        else {
+            static_cast<LeafPage*>(leaf_)->erase_value(cur_index_);
+            static_cast<LeafPage*>(leaf_)->insert_value(cur_index_, vEntry);
+        }
+    }
+
 
 
 
@@ -82,6 +93,7 @@ namespace DB::tree
         root_->unref();
     }
 
+    page_id_t BTree::get_root_id() const { return root_->page_id_; }
 
     uint32_t BTree::size() const { return size_; }
 

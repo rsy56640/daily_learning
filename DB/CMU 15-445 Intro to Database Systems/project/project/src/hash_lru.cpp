@@ -274,8 +274,10 @@ namespace DB::buffer
         std::lock_guard<std::shared_mutex> lg(shared_mutex_);
         for (PageList& bucket : buckets_) {
             PageListHandle* it = bucket.head_.next_hash_;
-            while (it != &bucket.head_)
+            while (it != &bucket.head_) {
                 it->page_->flush();
+                it = it->next_hash_;
+            }
         }
     }
 

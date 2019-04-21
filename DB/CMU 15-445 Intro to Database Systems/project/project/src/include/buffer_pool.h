@@ -2,7 +2,6 @@
 #define _BUFFER_POOL_H
 #include "hash_lru.h"
 #include "disk_manager.h"
-#include "log_manager.h"
 
 namespace DB::buffer
 {
@@ -43,8 +42,9 @@ namespace DB::buffer
         // remove page_id from hash-lru
         bool DeletePage(page_id_t page_id);
 
-
+        // flush dirty page into disk.
         void flush();
+
 
     public:
         disk::DiskManager* disk_manager_;

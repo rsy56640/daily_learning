@@ -19,7 +19,7 @@ namespace DB::tree
     // used for init B+Tree
     struct OpenTableInfo {
         bool isInit;
-        page_id_t root_id;
+        page_id_t root_id; // only needed when (!init)
     };
 
 
@@ -69,6 +69,7 @@ namespace DB::tree
         void destroy();                     // destroy the iterator when not use
         KeyEntry getK() const;
         ValueEntry getV() const;
+        void updateV(const ValueEntry&);
     private:
         BTreePage * leaf_;
         uint32_t cur_index_;
@@ -107,6 +108,8 @@ namespace DB::tree
         void debug() const;
         void debug_page(bool config, page_id_t) const;
 
+
+        page_id_t get_root_id() const;
 
         uint32_t size() const;
 

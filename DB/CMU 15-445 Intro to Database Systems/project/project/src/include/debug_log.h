@@ -8,31 +8,31 @@ namespace DB::debug
 {
 
     constexpr bool
-        PAGE_REF = false,
-        LRU_EVICT = true,
-        BT_CREATE = true,
+        PAGE_REF = true,
+        LRU_EVICT = false,
+        BT_CREATE = false,
 
         BUFFER_FETCH = true,
         BUFFER_FLUSH = true,
         BUFFER_NEW = true,
         BUFFER_DELETE = true,
 
-        SPLIT_ROOT_INTERNAL = true,
-        SPLIT_ROOT_LEAF = true,
-        SPLIT_INTERNAL = true,
-        SPLIT_LEAF = true,
+        SPLIT_ROOT_INTERNAL = false,
+        SPLIT_ROOT_LEAF = false,
+        SPLIT_INTERNAL = false,
+        SPLIT_LEAF = false,
 
-        MERGE_INTERNAL = true,
-        MERGE_LEAF = true,
+        MERGE_INTERNAL = false,
+        MERGE_LEAF = false,
 
-        ERASE_ROOT_LEAF = true,
-        ERASE_ROOT_INTERNAL = true,
-        ERASE_NONMIN_LEAF = true,
-        ERASE_NONMIN_INTERNAL = true,
+        ERASE_ROOT_LEAF = false,
+        ERASE_ROOT_INTERNAL = false,
+        ERASE_NONMIN_LEAF = false,
+        ERASE_NONMIN_INTERNAL = false,
 
         NON_DEBUG = false,
         DEBUG = true,
-        CONTROL = false;
+        CONTROL = true;
 
     static const char* debug_output = "./debug_output.txt";
 

@@ -8,6 +8,7 @@ namespace DB::disk
 
     DiskManager::DiskManager()
         :
+        dn_init_(false),
         cur_page_no_(page::NOT_A_PAGE),
         file_name_(db_name),
         log_name_(log_name),
@@ -17,6 +18,7 @@ namespace DB::disk
             std::ios::binary | std::ios::in | std::ios::out);
         // directory or file does not exist
         if (!db_io_.is_open()) {
+            dn_init_ = true;
             db_io_.clear();
             // create a new file
             db_io_.open(db_name,
@@ -55,9 +57,9 @@ namespace DB::disk
 
     void DiskManager::set_cur_page_id(page_id_t page_id) { cur_page_no_ = page_id; }
 
-    void DiskManager::WritePage(page_id_t page_id, const char *page_data)
+    void DiskManager::WritePage(page_id_t page_id, const char(&page_data)[page::PAGE_SIZE])
     {
-        db_io_.seekp(page_id * PAGE_SIZE);
+        db_io_.seekp(page_id * PAGE_SIZE, std::ios_base::beg);
         db_io_.write(page_data, PAGE_SIZE);
         if (db_io_.bad())
         {
@@ -70,11 +72,11 @@ namespace DB::disk
 
 
     // Concurrency: maybe wait until the page has been flushed.
-    bool DiskManager::ReadPage(page_id_t page_id, char* page_data)
+    bool DiskManager::ReadPage(page_id_t page_id, char(&page_data)[page::PAGE_SIZE])
     {
-        auto doReadPage = [this](page_id_t page_id, char* page_data)
+        auto doReadPage = [this](page_id_t page_id, char(&page_data)[page::PAGE_SIZE])
         {
-            db_io_.seekg(page_id * PAGE_SIZE);
+            db_io_.seekg(page_id * PAGE_SIZE, std::ios_base::beg);
             db_io_.read(page_data, PAGE_SIZE);
             const uint32_t read_count = db_io_.gcount();
             if (read_count < PAGE_SIZE)
@@ -149,6 +151,13 @@ namespace DB::disk
         return true;
     }
 
+    log_state_t DiskManager::check_log()
+    {
+        // TODO: 
+        return log_state_t::OK;
+
+    }
+
 
     page_id_t DiskManager::AllocatePage() { return ++cur_page_no_; }
 
@@ -156,13 +165,11 @@ namespace DB::disk
     uint32_t DiskManager::log_size() const { return log_size_; }
 
 
-    /*
+
     uint32_t DiskManager::hash(page_id_t page_id) const noexcept {
         return page_id & (dirty_hash_bucket - 1);
     }
 
-
-    
     bool DiskManager::is_dirty(page_id_t page_id) const {
         const uint32_t bucket_no = hash(page_id);
         std::shared_lock<std::shared_mutex> slk{ dirty_page_sets_mtx_[bucket_no] };
@@ -179,6 +186,6 @@ namespace DB::disk
         std::lock_guard<std::shared_mutex> lg{ dirty_page_sets_mtx_[bucket_no] };
         dirty_page_sets_[bucket_no].insert(page_id);
     }
-    */
+
 
 } // end namespace DB::disk

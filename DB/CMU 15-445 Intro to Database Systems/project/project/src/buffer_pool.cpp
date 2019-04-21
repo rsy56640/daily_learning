@@ -39,7 +39,7 @@ namespace DB::buffer
         debug::DEBUG_LOG(debug::BUFFER_FLUSH, "BufferPoolManager::FlushPage() %d\n", page_id);
         Page* page_ptr = hash_lru_.find(page_id, false); // `false` means no update lru.
         if (page_ptr == nullptr) return false;
-        disk_manager_->WritePage(page_ptr->get_page_id(), page_ptr->get_data());
+        disk_manager_->WritePage(page_ptr->get_page_id(), page_ptr->data_);
         page_ptr->unref();
         return true;
     }
